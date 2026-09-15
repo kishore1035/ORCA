@@ -1,0 +1,22 @@
+# Subagent-driven-development scratch workspace (ledgers, briefs, reports, review packages)
+.superpowers/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Env files
+.env
+.env.local
+
+# OS
+.DS_Store
