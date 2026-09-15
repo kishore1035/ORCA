@@ -1,3 +1,5 @@
+import json
+import pytest
 from app import db
 
 
@@ -82,3 +84,99 @@ def test_last_verdict_round_trip_defaults_to_none(tmp_path, monkeypatch):
 
     db.set_last_verdict("s1", "unsafe")
     assert db.get_last_verdict("s1") == "unsafe"
+
+
+def test_create_user_then_get_user_by_email(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    user_id = db.create_user("fisher@example.com", "hash123", "salt456")
+    user = db.get_user_by_email("fisher@example.com")
+
+    assert user["id"] == user_id
+    assert user["email"] == "fisher@example.com"
+    assert user["password_hash"] == "hash123"
+    assert user["password_salt"] == "salt456"
+
+
+def test_get_user_by_email_returns_none_for_unknown_email(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    assert db.get_user_by_email("nobody@example.com") is None
+
+
+def test_create_user_rejects_duplicate_email(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    db.create_user("fisher@example.com", "hash1", "salt1")
+    with pytest.raises(db.DuplicateEmailError):
+        db.create_user("fisher@example.com", "hash2", "salt2")
+
+
+def test_ensure_session_creates_new_session_owned_by_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    db.ensure_session("s1", user_id=42)
+    assert db.get_session_owner("s1") == 42
+
+
+def test_ensure_session_is_idempotent_for_same_owner(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    db.ensure_session("s1", user_id=42)
+    db.ensure_session("s1", user_id=42)  # second message in the same session
+    assert db.get_session_owner("s1") == 42
+
+
+def test_ensure_session_rejects_wrong_owner(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    db.ensure_session("s1", user_id=42)
+    with pytest.raises(db.SessionOwnershipError):
+        db.ensure_session("s1", user_id=99)
+
+
+def test_get_session_owner_returns_none_for_unknown_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    assert db.get_session_owner("never-seen") is None
+
+
+def test_save_and_get_push_subscription(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    sub = json.dumps({"endpoint": "https://push.example.com/x", "keys": {"p256dh": "a", "auth": "b"}})
+    db.save_push_subscription("s1", sub)
+
+    subs = db.get_push_subscriptions("s1")
+    assert len(subs) == 1
+    assert subs[0]["endpoint"] == "https://push.example.com/x"
+
+
+def test_get_push_subscriptions_empty_for_unknown_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    assert db.get_push_subscriptions("never-seen") == []
+
+
+def test_save_push_subscription_dedupes_by_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    sub = json.dumps({"endpoint": "https://push.example.com/x", "keys": {"p256dh": "a", "auth": "b"}})
+    db.save_push_subscription("s1", sub)
+    # Browser re-subscribes with the same endpoint but updated keys.
+    sub_updated = json.dumps({"endpoint": "https://push.example.com/x", "keys": {"p256dh": "new", "auth": "b"}})
+    db.save_push_subscription("s1", sub_updated)
+
+    subs = db.get_push_subscriptions("s1")
+    assert len(subs) == 1
+    assert subs[0]["keys"]["p256dh"] == "new"

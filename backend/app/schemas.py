@@ -112,3 +112,22 @@ class ChatResponse(BaseModel):
     location: CanonicalLocation | None = None
 
 
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user_id: int
+    email: str
+
+
+class PushSubscribeRequest(BaseModel):
+    session_id: str
+    subscription: dict[str, Any]

@@ -2,14 +2,15 @@
 """Ocean Analytics Agent.
 
 Provides PFZ/advisory-aware fishing analysis by correlating Sea Surface Temperature (SST),
-chlorophyll-a, SST trends, and satellite bio-optical markers.
+chlorophyll-a, SST trends, satellite bio-optical markers, and official INCOIS PFZ advisories.
 
-NOTE: ORCA provides advisory-aware fishing analysis and does not claim to independently
-generate or supersede statutory INCOIS PFZ advisories.
+NOTE: ORCA provides advisory-aware fishing analysis and correlates official INCOIS PFZ advisories
+alongside satellite telemetry.
 """
 from app.connectors.ocean_analytics import get_sst, get_chlorophyll, get_sst_trend
 from app.connectors.mosdac import get_mosdac_satellite_data
 from app.connectors.incois import get_incois_marine_forecast
+from app.connectors.pfz import get_pfz_advisory
 from app.schemas import TraceEntry
 
 # Simplified heuristic for PFZ/advisory-aware fishing analysis:
@@ -31,6 +32,30 @@ def _trend_direction(trend: list[dict]) -> str:
     return "warming" if delta > 0 else "cooling"
 
 
+def _productivity_trend(trend: list[dict]) -> tuple[str, str]:
+    """Deterministic 'why has it changed' signal for the reporting agent,
+    built from real SST trend data (not fabricated fish-catch statistics --
+    no free fish-productivity dataset exists). Compares whether SST was
+    inside the favorable PFZ band at the start vs. the end of the trend
+    window; chlorophyll trend data isn't available so this covers only the
+    SST half of the PFZ score."""
+    if not trend:
+        return "unknown", "No SST trend data available to assess a change."
+    start_c, end_c = trend[0]["sst_celsius"], trend[-1]["sst_celsius"]
+    start_ok = SST_MIN_C <= start_c <= SST_MAX_C
+    end_ok = SST_MIN_C <= end_c <= SST_MAX_C
+    note = (
+        f"SST moved from {start_c}°C ({'within' if start_ok else 'outside'} the "
+        f"{SST_MIN_C}-{SST_MAX_C}°C favorable band) to {end_c}°C "
+        f"({'within' if end_ok else 'outside'} it) over the observed period."
+    )
+    if end_ok and not start_ok:
+        return "improving", note
+    if start_ok and not end_ok:
+        return "declining", note
+    return "stable", note
+
+
 def _score(sst_c: float, chlorophyll: float) -> tuple[str, list[str]]:
     sst_ok = SST_MIN_C <= sst_c <= SST_MAX_C
     chl_ok = chlorophyll >= CHLOROPHYLL_MIN_MG_M3
@@ -48,18 +73,19 @@ def _score(sst_c: float, chlorophyll: float) -> tuple[str, list[str]]:
 
 
 async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, TraceEntry]:
-    # 1. Fetch baseline NOAA SST and chlorophyll
+    # 1. Fetch baseline NOAA SST, chlorophyll, trend, and INCOIS PFZ advisory
     sst_result = await get_sst(lat, lon)
     chl_result = await get_chlorophyll(lat, lon)
     trend_result = await get_sst_trend(lat, lon)
+    pfz_result = await get_pfz_advisory(lat, lon)
 
     sst_c = sst_result.data["sst_celsius"]
     chlorophyll = chl_result.data["chlorophyll_mg_m3"]
     trend = trend_result.data["sst_trend"]
 
-    sources = [sst_result.source, chl_result.source, trend_result.source]
-    fetched_at = max(sst_result.fetched_at, chl_result.fetched_at, trend_result.fetched_at)
-    is_cached = sst_result.is_cached or chl_result.is_cached or trend_result.is_cached
+    sources = [sst_result.source, chl_result.source, trend_result.source, pfz_result.source]
+    fetched_at = max(sst_result.fetched_at, chl_result.fetched_at, trend_result.fetched_at, pfz_result.fetched_at)
+    is_cached = sst_result.is_cached or chl_result.is_cached or trend_result.is_cached or pfz_result.is_cached
 
     parameters = []
 
@@ -94,6 +120,7 @@ async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, Trace
             pass
 
     likelihood, reasons = _score(sst_c, chlorophyll)
+    productivity_trend, productivity_note = _productivity_trend(trend)
     reasons.append("Advisory-aware heuristic analysis: correlates SST and chlorophyll fronts (not an official INCOIS PFZ bulletin)")
 
     output = {
@@ -105,6 +132,13 @@ async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, Trace
         "sst_trend_direction": _trend_direction(trend),
         "parameters": parameters,
         "advisory_note": "PFZ/advisory-aware fishing analysis",
+        "productivity_trend": productivity_trend,
+        "productivity_note": productivity_note,
+        # Real INCOIS-issued PFZ advisory (connectors/pfz.py), independent of
+        # the SST/chlorophyll heuristic above -- a named coastal landing
+        # center plus the bearing/distance/depth offshore to its current
+        # advisory point, not another likelihood score.
+        "pfz_advisory": pfz_result.data,
     }
     trace = TraceEntry(
         agent="ocean_analytics",

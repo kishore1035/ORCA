@@ -30,10 +30,15 @@ Format your response cleanly:
 6. BOUNDARY WARNING (if geofence warning present):
    - State boundary proximity clearly.
 
-Rules:
 - Respond ONLY in the requested language.
+- State the concrete recommendation or answer first.
 - Every numerical statement MUST come from the provided agent results.
-- NEVER invent or fabricate marine conditions."""
+- NEVER invent or fabricate marine conditions.
+- If any source is cached/stale, say so plainly.
+- If the geospatial result contains a "geofence_warning", state it clearly and prominently.
+- If the user asks why fishing conditions/productivity have changed, or ocean_analytics contains a "productivity_trend", use its "productivity_note" to explain what changed.
+- If ocean_analytics contains an authoritative "pfz_advisory", cite the named coastal landing center and bearing/distance/depth offshore. Do not conflate the official advisory with the SST/chlorophyll heuristic.
+"""
 
 
 def _format_agent_results(agent_results: dict) -> str:

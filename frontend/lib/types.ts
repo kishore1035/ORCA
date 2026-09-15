@@ -119,3 +119,8 @@ export interface RouteWaypoint {
   reasons: string[];
 }
 
+export interface AuthResponse {
+  token: string;
+  user_id: number;
+  email: string;
+}

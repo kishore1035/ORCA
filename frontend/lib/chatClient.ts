@@ -1,6 +1,32 @@
-import { ChatMessage, ChatStreamEvent, ProactiveAlert } from "./types";
+import { AuthResponse, ChatMessage, ChatStreamEvent, ProactiveAlert } from "./types";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+
+async function _parseAuthResponse(response: Response, failureLabel: string): Promise<AuthResponse> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail ?? `${failureLabel} failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function signup(email: string, password: string): Promise<AuthResponse> {
+  const response = await fetch(`${BACKEND_URL}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return _parseAuthResponse(response, "Signup");
+}
+
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const response = await fetch(`${BACKEND_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return _parseAuthResponse(response, "Login");
+}
 
 export function parseSSEChunk(chunk: string): ChatStreamEvent[] {
   const events: ChatStreamEvent[] = [];
@@ -18,24 +44,48 @@ export function parseSSEChunk(chunk: string): ChatStreamEvent[] {
   return events;
 }
 
-export async function fetchHistory(sessionId: string): Promise<ChatMessage[]> {
-  const response = await fetch(`${BACKEND_URL}/sessions/${sessionId}/history`);
+export async function fetchVapidPublicKey(): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/push/vapid-public-key`);
+  if (!response.ok) throw new Error(`/push/vapid-public-key failed: ${response.status}`);
+  const body = await response.json();
+  return body.public_key;
+}
+
+export async function subscribePush(
+  sessionId: string,
+  token: string,
+  subscription: PushSubscriptionJSON
+): Promise<void> {
+  const response = await fetch(`${BACKEND_URL}/push/subscribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ session_id: sessionId, subscription }),
+  });
+  if (!response.ok) throw new Error(`/push/subscribe failed: ${response.status}`);
+}
+
+export async function fetchHistory(sessionId: string, token: string): Promise<ChatMessage[]> {
+  const response = await fetch(`${BACKEND_URL}/sessions/${sessionId}/history`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (!response.ok) throw new Error(`/sessions/${sessionId}/history failed: ${response.status}`);
   return response.json();
 }
 
 /**
  * Subscribes to proactive hazard alerts for a session over a long-lived SSE
- * connection. In-app only: the alert stops arriving the moment the tab
- * closes or navigates away -- there is no service worker / push
- * subscription behind this, by design (see backend/app/alerting.py).
+ * connection -- this delivers alerts while a tab is open. For delivery with
+ * no tab open, see lib/push.ts's real Web Push subscription (separate,
+ * opt-in, requires the browser to support it).
  * Returns an unsubscribe function.
  */
 export function subscribeToAlerts(
   sessionId: string,
+  token: string,
   onAlert: (alert: ProactiveAlert) => void
 ): () => void {
-  const source = new EventSource(`${BACKEND_URL}/sessions/${sessionId}/alerts/stream`);
+  const url = `${BACKEND_URL}/sessions/${sessionId}/alerts/stream?token=${encodeURIComponent(token)}`;
+  const source = new EventSource(url);
   source.addEventListener("alert", (event) => {
     onAlert(JSON.parse((event as MessageEvent).data));
   });
@@ -45,6 +95,7 @@ export function subscribeToAlerts(
 export async function* streamChat(
   sessionId: string,
   message: string,
+  token?: string | null,
   location?: { lat: number; lon: number } | null
 ): AsyncGenerator<ChatStreamEvent> {
   const payload: Record<string, unknown> = { session_id: sessionId, message };
@@ -55,9 +106,13 @@ export async function* streamChat(
       source: "USER_SELECTED",
     };
   }
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const response = await fetch(`${BACKEND_URL}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(`/chat failed: ${response.status}`);

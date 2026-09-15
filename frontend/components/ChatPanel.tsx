@@ -1,11 +1,17 @@
 // frontend/components/ChatPanel.tsx
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useEffect, useRef, useState, FormEvent } from "react";
 import { ChatMessage } from "@/lib/types";
 import { RecommendationHero } from "@/components/RecommendationHero";
 import { WhatIfCard } from "@/components/WhatIfCard";
 import { EvidencePanel } from "@/components/EvidencePanel";
+import {
+  isSpeechRecognitionSupported,
+  isSpeechSynthesisSupported,
+  speak,
+  startListening,
+} from "@/lib/voice";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -35,6 +41,21 @@ const DEMO_QUICK_PROMPTS = [
 export function ChatPanel({ messages, onSend, isStreaming }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [showEvidenceFor, setShowEvidenceFor] = useState<number | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [speakAnswers, setSpeakAnswers] = useState(false);
+  const lastSpokenCount = useRef(0);
+
+  useEffect(() => {
+    if (!speakAnswers) {
+      lastSpokenCount.current = messages.length;
+      return;
+    }
+    const last = messages[messages.length - 1];
+    if (messages.length > lastSpokenCount.current && last?.role === "assistant") {
+      speak(last.content);
+    }
+    lastSpokenCount.current = messages.length;
+  }, [messages, speakAnswers]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -48,8 +69,20 @@ export function ChatPanel({ messages, onSend, isStreaming }: ChatPanelProps) {
     onSend(query);
   }
 
+  function handleMicClick() {
+    if (isListening) return;
+    setIsListening(true);
+    startListening(
+      (text) => {
+        setInput(text);
+        setIsListening(false);
+      },
+      () => setIsListening(false)
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full bg-slate-50/50 dark:bg-slate-950/20">
+    <div className="flex flex-col h-full bg-slate-50/50">
       {/* Quick Prompt Bar */}
       <div className="p-3 border-b bg-white border-slate-200">
         <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
@@ -144,6 +177,21 @@ export function ChatPanel({ messages, onSend, isStreaming }: ChatPanelProps) {
         )}
       </div>
 
+      {/* Voice Toggle Option */}
+      {isSpeechSynthesisSupported() && (
+        <div className="px-4 py-1.5 border-t border-slate-100 bg-white flex items-center justify-end">
+          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={speakAnswers}
+              onChange={(e) => setSpeakAnswers(e.target.checked)}
+              className="accent-black rounded"
+            />
+            <span>Read answers aloud</span>
+          </label>
+        </div>
+      )}
+
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="flex gap-2 p-3 border-t bg-white border-slate-200">
         <input
@@ -153,6 +201,17 @@ export function ChatPanel({ messages, onSend, isStreaming }: ChatPanelProps) {
           placeholder="Ask e.g. 'Can I fish near Mangaluru tomorrow at 6 AM?'"
           disabled={isStreaming}
         />
+        {isSpeechRecognitionSupported() && (
+          <button
+            type="button"
+            onClick={handleMicClick}
+            disabled={isStreaming || isListening}
+            className="px-3.5 py-2.5 border border-slate-300 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 text-xs font-semibold transition-colors"
+            aria-label="Speak your question"
+          >
+            {isListening ? "Listening..." : "🎤 Speak"}
+          </button>
+        )}
         <button
           type="submit"
           className="px-5 py-2.5 bg-black hover:bg-slate-800 text-white text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors shadow-xs"
