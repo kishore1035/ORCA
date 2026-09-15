@@ -1,0 +1,10 @@
+{
+  "fetched_at": "2026-09-01T06:00:00+00:00",
+  "data": {
+    "wave_height_m": 1.2,
+    "swell_height_m": 0.8,
+    "wind_speed_kmh": 18.5,
+    "wind_direction_deg": 210,
+    "forecast_time": "2026-09-01T06:00"
+  }
+}
