@@ -136,9 +136,11 @@ Rules:
 
 ## 7. Open Items for Phase 2 (explicitly deferred, not forgotten)
 
-- Real INCOIS/IMD/cyclone-alert live feeds once access is confirmed
+- Real INCOIS/IMD/cyclone-alert live feeds once access is confirmed (alerts connector still serves a static, always-empty cached snapshot)
 - Route optimization agent
-- Live geofencing feed
+- Live geofencing feed against a real MPA/IMBL dataset (still one static example polygon; the proximity check and warning message are real, the boundary data is not)
 - Voice/SMS/IVR channels
-- Proactive/push alerting
+- Proactive/push alerting (hazard/geofence warnings are surfaced only when the user asks, not pushed ahead of a query)
 - Persistent multi-user history (Postgres)
+
+**Added post-MVP, no longer deferred (2026-09-15):** real historical SST trend (7-day ERDDAP time series) feeding a basic warming/cooling/stable signal into the ocean-analytics reasoning and the reporting answer; a deterministic geofence warning surfaced prominently in the answer whenever a query resolves near the static MPA snapshot; a real chart (SST trend sparkline) in the reasoning-trace panel instead of raw JSON only.

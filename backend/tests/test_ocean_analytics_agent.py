@@ -28,6 +28,14 @@ async def test_run_ocean_analytics_agent_combines_both_connectors(monkeypatch):
         data={"chlorophyll_mg_m3": 0.35}, source="noaa-erddap-chlorophyll",
         fetched_at=datetime(2026, 9, 15, 6, 0, 0, tzinfo=timezone.utc), is_cached=True,
     )
+    trend_result = ConnectorResult(
+        data={"sst_trend": [
+            {"date": "2026-09-13T09:00:00Z", "sst_celsius": 27.5},
+            {"date": "2026-09-14T09:00:00Z", "sst_celsius": 28.5},
+        ]},
+        source="noaa-erddap-sst-trend",
+        fetched_at=datetime(2026, 9, 15, 3, 0, 0, tzinfo=timezone.utc), is_cached=False,
+    )
 
     async def fake_get_sst(lat, lon):
         return sst_result
@@ -35,15 +43,35 @@ async def test_run_ocean_analytics_agent_combines_both_connectors(monkeypatch):
     async def fake_get_chlorophyll(lat, lon):
         return chl_result
 
+    async def fake_get_sst_trend(lat, lon):
+        return trend_result
+
     monkeypatch.setattr(oaa, "get_sst", fake_get_sst)
     monkeypatch.setattr(oaa, "get_chlorophyll", fake_get_chlorophyll)
+    monkeypatch.setattr(oaa, "get_sst_trend", fake_get_sst_trend)
 
     output, trace = await oaa.run_ocean_analytics_agent(10.0, 76.0)
 
     assert output["pfz_likelihood"] == "high"
+    assert output["sst_trend_celsius"] == trend_result.data["sst_trend"]
+    assert output["sst_trend_direction"] == "warming"
     assert trace.agent == "ocean_analytics"
-    assert set(trace.sources) == {"noaa-erddap-sst", "noaa-erddap-chlorophyll"}
-    # Verify max() is used for fetched_at: should be the LATER timestamp
+    assert set(trace.sources) == {
+        "noaa-erddap-sst", "noaa-erddap-chlorophyll", "noaa-erddap-sst-trend",
+    }
+    # Verify max() is used for fetched_at: should be the LATEST timestamp
     assert trace.fetched_at == datetime(2026, 9, 15, 6, 0, 0, tzinfo=timezone.utc)
-    # Verify or is used for is_cached: one False + one True = True
+    # Verify or is used for is_cached: any cached connector makes the whole result cached
     assert trace.is_cached is True
+
+
+def test_trend_direction_stable_within_small_delta():
+    direction = oaa._trend_direction([
+        {"date": "d1", "sst_celsius": 28.0},
+        {"date": "d2", "sst_celsius": 28.1},
+    ])
+    assert direction == "stable"
+
+
+def test_trend_direction_empty_list_is_unknown():
+    assert oaa._trend_direction([]) == "unknown"

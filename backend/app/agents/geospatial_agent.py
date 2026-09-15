@@ -16,6 +16,13 @@ async def run_geospatial_agent(place_name: str) -> tuple[dict, TraceEntry]:
         "boundary_distance_km": boundary_info["distance_km"],
         "within_warning_zone": boundary_info["distance_km"] <= PROXIMITY_WARNING_KM,
     }
+    if output["within_warning_zone"]:
+        # Deterministic, code-guaranteed warning -- not left to the reporting LLM's
+        # discretion to notice and mention on its own.
+        output["geofence_warning"] = (
+            f"Within {boundary_info['distance_km']}km of {boundary_info['nearest_boundary']} "
+            "-- check local marine protected area / boundary regulations before entering."
+        )
     if geo_result.is_cached:
         # The live geocode failed and fell back to the committed snapshot, which
         # always resolves to the same fixed location regardless of place_name --

@@ -7,6 +7,8 @@ from app.schemas import ConnectorResult
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "snapshots"
 SST_SNAPSHOT = DATA_DIR / "sst.json"
 CHLOROPHYLL_SNAPSHOT = DATA_DIR / "chlorophyll.json"
+SST_TREND_SNAPSHOT = DATA_DIR / "sst_trend.json"
+SST_TREND_DAYS = 7
 ERDDAP_BASE = "https://coastwatch.pfeg.noaa.gov/erddap/griddap"
 
 # MUR SST / chlorophyll products lag ~1 day behind the current date, so
@@ -39,6 +41,26 @@ async def _fetch_chlorophyll(lat: float, lon: float) -> dict:
     return {"chlorophyll_mg_m3": payload["table"]["rows"][0][-1]}
 
 
+async def _fetch_sst_trend(lat: float, lon: float) -> dict:
+    end_date = date.today() - timedelta(days=ERDDAP_DATA_LAG_DAYS)
+    start_date = end_date - timedelta(days=SST_TREND_DAYS - 1)
+    start_iso = f"{start_date.isoformat()}T09:00:00Z"
+    end_iso = f"{end_date.isoformat()}T09:00:00Z"
+    url = (
+        f"{ERDDAP_BASE}/jplMURSST41.json?analysed_sst[({start_iso}):1:({end_iso})]"
+        f"[({lat})][({lon})]"
+    )
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        payload = resp.json()
+    return {
+        "sst_trend": [
+            {"date": row[0], "sst_celsius": row[-1]} for row in payload["table"]["rows"]
+        ]
+    }
+
+
 async def get_sst(lat: float, lon: float) -> ConnectorResult:
     return await fetch_with_fallback("noaa-erddap-sst", lambda: _fetch_sst(lat, lon), SST_SNAPSHOT)
 
@@ -46,4 +68,10 @@ async def get_sst(lat: float, lon: float) -> ConnectorResult:
 async def get_chlorophyll(lat: float, lon: float) -> ConnectorResult:
     return await fetch_with_fallback(
         "noaa-erddap-chlorophyll", lambda: _fetch_chlorophyll(lat, lon), CHLOROPHYLL_SNAPSHOT
+    )
+
+
+async def get_sst_trend(lat: float, lon: float) -> ConnectorResult:
+    return await fetch_with_fallback(
+        "noaa-erddap-sst-trend", lambda: _fetch_sst_trend(lat, lon), SST_TREND_SNAPSHOT
     )

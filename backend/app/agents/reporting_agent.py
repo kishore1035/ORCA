@@ -6,6 +6,9 @@ Write a single clear, conversational answer:
 - State the concrete recommendation or answer first.
 - Then briefly explain the reasoning: which values from which sources led to it.
 - If any source is cached/stale, say so plainly (e.g. "based on data from X").
+- If the geospatial result contains a "geofence_warning", state it clearly and prominently
+  in your answer, even if the user's question was not primarily about boundaries or
+  protected areas.
 - Never invent numbers that are not present in the provided agent results."""
 
 
