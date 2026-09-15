@@ -22,11 +22,11 @@ def test_score_moderate_when_one_threshold_met():
 async def test_run_ocean_analytics_agent_combines_both_connectors(monkeypatch):
     sst_result = ConnectorResult(
         data={"sst_celsius": 28.5}, source="noaa-erddap-sst",
-        fetched_at=datetime(2026, 9, 15, tzinfo=timezone.utc), is_cached=False,
+        fetched_at=datetime(2026, 9, 15, 0, 0, 0, tzinfo=timezone.utc), is_cached=False,
     )
     chl_result = ConnectorResult(
         data={"chlorophyll_mg_m3": 0.35}, source="noaa-erddap-chlorophyll",
-        fetched_at=datetime(2026, 9, 15, tzinfo=timezone.utc), is_cached=False,
+        fetched_at=datetime(2026, 9, 15, 6, 0, 0, tzinfo=timezone.utc), is_cached=True,
     )
 
     async def fake_get_sst(lat, lon):
@@ -43,3 +43,7 @@ async def test_run_ocean_analytics_agent_combines_both_connectors(monkeypatch):
     assert output["pfz_likelihood"] == "high"
     assert trace.agent == "ocean_analytics"
     assert set(trace.sources) == {"noaa-erddap-sst", "noaa-erddap-chlorophyll"}
+    # Verify max() is used for fetched_at: should be the LATER timestamp
+    assert trace.fetched_at == datetime(2026, 9, 15, 6, 0, 0, tzinfo=timezone.utc)
+    # Verify or is used for is_cached: one False + one True = True
+    assert trace.is_cached is True
