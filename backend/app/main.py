@@ -1,14 +1,32 @@
+import asyncio
 import json
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from app import db
+from app import alerting, db
 from app.config import get_settings
 from app.llm import get_llm_client
 from app.graph import build_graph
 from app.schemas import ChatMessage, ChatRequest
 
-app = FastAPI(title="ORCA Marine Intelligence Platform")
+# How often to send an SSE keep-alive comment on the alerts stream so
+# intermediate proxies/load balancers don't time out an otherwise-idle
+# long-lived connection.
+ALERT_STREAM_PING_SECONDS = 15
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    task = asyncio.create_task(alerting.run_periodic_checks())
+    try:
+        yield
+    finally:
+        task.cancel()
+
+
+app = FastAPI(title="ORCA Marine Intelligence Platform", lifespan=lifespan)
 
 _settings = get_settings()
 app.add_middleware(
@@ -17,8 +35,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-db.init_db()
 
 
 @app.get("/health")
@@ -29,6 +45,24 @@ async def health() -> dict:
 @app.get("/sessions/{session_id}/history")
 async def session_history(session_id: str) -> list[ChatMessage]:
     return [ChatMessage(**m) for m in db.get_history(session_id)]
+
+
+@app.get("/sessions/{session_id}/alerts/stream")
+async def alerts_stream(session_id: str):
+    queue = alerting.subscribe(session_id)
+
+    async def event_stream():
+        try:
+            while True:
+                try:
+                    alert = await asyncio.wait_for(queue.get(), timeout=ALERT_STREAM_PING_SECONDS)
+                    yield f"event: alert\ndata: {json.dumps(alert)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            alerting.unsubscribe(session_id, queue)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.post("/chat")
@@ -45,6 +79,8 @@ async def chat(request: ChatRequest):
         ):
             trace = state.get("trace", [])
             for entry in trace[last_trace_len:]:
+                if entry.agent == "geospatial" and "lat" in entry.output and "lon" in entry.output:
+                    db.set_last_location(request.session_id, entry.output["lat"], entry.output["lon"])
                 yield f"event: trace\ndata: {entry.model_dump_json()}\n\n"
             last_trace_len = len(trace)
             if state.get("final_answer"):

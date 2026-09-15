@@ -1,4 +1,4 @@
-import { ChatMessage, ChatStreamEvent } from "./types";
+import { ChatMessage, ChatStreamEvent, ProactiveAlert } from "./types";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
@@ -22,6 +22,24 @@ export async function fetchHistory(sessionId: string): Promise<ChatMessage[]> {
   const response = await fetch(`${BACKEND_URL}/sessions/${sessionId}/history`);
   if (!response.ok) throw new Error(`/sessions/${sessionId}/history failed: ${response.status}`);
   return response.json();
+}
+
+/**
+ * Subscribes to proactive hazard alerts for a session over a long-lived SSE
+ * connection. In-app only: the alert stops arriving the moment the tab
+ * closes or navigates away -- there is no service worker / push
+ * subscription behind this, by design (see backend/app/alerting.py).
+ * Returns an unsubscribe function.
+ */
+export function subscribeToAlerts(
+  sessionId: string,
+  onAlert: (alert: ProactiveAlert) => void
+): () => void {
+  const source = new EventSource(`${BACKEND_URL}/sessions/${sessionId}/alerts/stream`);
+  source.addEventListener("alert", (event) => {
+    onAlert(JSON.parse((event as MessageEvent).data));
+  });
+  return () => source.close();
 }
 
 export async function* streamChat(

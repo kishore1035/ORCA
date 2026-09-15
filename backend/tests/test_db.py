@@ -40,3 +40,45 @@ def test_append_message_creates_db_file_if_missing(tmp_path, monkeypatch):
     db.init_db()
 
     assert db_path.exists()
+
+
+def test_set_last_location_then_get_tracked_sessions(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    db.set_last_location("s1", 9.9679, 76.2444)
+    tracked = db.get_tracked_sessions()
+
+    assert tracked == [{"session_id": "s1", "lat": 9.9679, "lon": 76.2444}]
+
+
+def test_get_tracked_sessions_excludes_sessions_without_location(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    db.append_message("no-location-session", "user", "hi")
+    tracked = db.get_tracked_sessions()
+
+    assert tracked == []
+
+
+def test_set_last_location_overwrites_previous_value(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    db.set_last_location("s1", 9.0, 76.0)
+    db.set_last_location("s1", 10.0, 77.0)
+
+    tracked = db.get_tracked_sessions()
+    assert tracked == [{"session_id": "s1", "lat": 10.0, "lon": 77.0}]
+
+
+def test_last_verdict_round_trip_defaults_to_none(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    db.set_last_location("s1", 9.0, 76.0)
+    assert db.get_last_verdict("s1") is None
+
+    db.set_last_verdict("s1", "unsafe")
+    assert db.get_last_verdict("s1") == "unsafe"

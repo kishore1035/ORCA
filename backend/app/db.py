@@ -25,7 +25,10 @@ def init_db() -> None:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_lat REAL,
+                last_lon REAL,
+                last_verdict TEXT
             )"""
         )
         conn.execute(
@@ -64,6 +67,54 @@ def append_message(session_id: str, role: str, content: str) -> None:
         conn.execute(
             "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
             (session_id, role, content),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_last_location(session_id: str, lat: float, lon: float) -> None:
+    conn = _connect()
+    try:
+        conn.execute("INSERT OR IGNORE INTO sessions (id) VALUES (?)", (session_id,))
+        conn.execute(
+            "UPDATE sessions SET last_lat = ?, last_lon = ? WHERE id = ?",
+            (lat, lon, session_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_tracked_sessions() -> list[dict]:
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, last_lat, last_lon FROM sessions "
+            "WHERE last_lat IS NOT NULL AND last_lon IS NOT NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [{"session_id": sid, "lat": lat, "lon": lon} for sid, lat, lon in rows]
+
+
+def get_last_verdict(session_id: str) -> str | None:
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT last_verdict FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row else None
+
+
+def set_last_verdict(session_id: str, verdict: str) -> None:
+    conn = _connect()
+    try:
+        conn.execute("INSERT OR IGNORE INTO sessions (id) VALUES (?)", (session_id,))
+        conn.execute(
+            "UPDATE sessions SET last_verdict = ? WHERE id = ?", (verdict, session_id)
         )
         conn.commit()
     finally:

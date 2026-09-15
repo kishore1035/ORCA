@@ -15,6 +15,16 @@ class FakeGraph:
         yield {"trace": [trace_entry], "final_answer": "It is safe to go out."}
 
 
+class FakeGraphWithGeospatial:
+    async def astream(self, input, stream_mode):
+        geo_entry = TraceEntry(
+            agent="geospatial", inputs={}, output={"lat": 9.9679, "lon": 76.2444},
+            sources=["test"], fetched_at=datetime.now(timezone.utc), is_cached=False,
+        )
+        yield {"trace": [geo_entry]}
+        yield {"trace": [geo_entry], "final_answer": "Kochi is safe."}
+
+
 async def test_chat_endpoint_streams_trace_then_answer(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     db.init_db()
@@ -82,3 +92,20 @@ async def test_session_history_endpoint_returns_empty_for_new_session(monkeypatc
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+async def test_chat_endpoint_records_last_location_from_geospatial_trace(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+    monkeypatch.setattr(main_module, "build_graph", lambda client: FakeGraphWithGeospatial())
+    monkeypatch.setattr(main_module, "get_llm_client", lambda: object())
+
+    transport = ASGITransport(app=main_module.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with client.stream(
+            "POST", "/chat", json={"session_id": "s6", "message": "is it safe near Kochi?"}
+        ) as response:
+            async for _ in response.aiter_text():
+                pass
+
+    assert db.get_tracked_sessions() == [{"session_id": "s6", "lat": 9.9679, "lon": 76.2444}]

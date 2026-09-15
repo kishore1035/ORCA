@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { parseSSEChunk, streamChat, fetchHistory } from "./chatClient";
+import { parseSSEChunk, streamChat, fetchHistory, subscribeToAlerts } from "./chatClient";
 
 describe("parseSSEChunk", () => {
   it("parses a trace event", () => {
@@ -69,5 +69,32 @@ describe("fetchHistory", () => {
     await expect(fetchHistory("session-1")).rejects.toThrow(
       "/sessions/session-1/history failed: 404"
     );
+  });
+});
+
+describe("subscribeToAlerts", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("invokes the callback with parsed alert data and closes on unsubscribe", () => {
+    const listeners: Record<string, (event: { data: string }) => void> = {};
+    const close = vi.fn();
+    class FakeEventSource {
+      addEventListener(type: string, listener: (event: { data: string }) => void) {
+        listeners[type] = listener;
+      }
+      close = close;
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+
+    const onAlert = vi.fn();
+    const unsubscribe = subscribeToAlerts("session-1", onAlert);
+
+    listeners["alert"]({ data: JSON.stringify({ type: "alert", verdict: "unsafe", reasons: ["x"], lat: 1, lon: 2 }) });
+    expect(onAlert).toHaveBeenCalledWith({ type: "alert", verdict: "unsafe", reasons: ["x"], lat: 1, lon: 2 });
+
+    unsubscribe();
+    expect(close).toHaveBeenCalledOnce();
   });
 });

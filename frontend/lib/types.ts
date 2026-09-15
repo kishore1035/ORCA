@@ -15,3 +15,11 @@ export interface ChatMessage {
 export type ChatStreamEvent =
   | { type: "trace"; data: TraceEntry }
   | { type: "answer"; data: { answer: string } };
+
+export interface ProactiveAlert {
+  type: "alert";
+  verdict: string;
+  reasons: string[];
+  lat: number;
+  lon: number;
+}
