@@ -26,21 +26,35 @@ def test_assess_unsafe_on_cyclone_alert():
 
 
 async def test_run_risk_agent_returns_output_and_trace(monkeypatch):
-    alerts_result = ConnectorResult(
-        data={"cyclone_alerts": [], "lightning_alerts": []},
-        source="cached-alerts-snapshot",
-        fetched_at=datetime(2026, 9, 15, tzinfo=timezone.utc),
+    cyclone_result = ConnectorResult(
+        data={"cyclone_alerts": []},
+        source="gdacs-cyclone-tracker",
+        fetched_at=datetime(2026, 9, 15, 6, 0, 0, tzinfo=timezone.utc),
+        is_cached=False,
+    )
+    lightning_result = ConnectorResult(
+        data={"lightning_alerts": []},
+        source="cached-lightning-snapshot",
+        fetched_at=datetime(2026, 9, 15, 0, 0, 0, tzinfo=timezone.utc),
         is_cached=True,
     )
 
-    async def fake_get_alerts(lat, lon):
-        return alerts_result
+    async def fake_get_cyclone_alerts(lat, lon):
+        return cyclone_result
 
-    monkeypatch.setattr(risk_agent, "get_alerts", fake_get_alerts)
+    async def fake_get_lightning_alerts(lat, lon):
+        return lightning_result
+
+    monkeypatch.setattr(risk_agent, "get_cyclone_alerts", fake_get_cyclone_alerts)
+    monkeypatch.setattr(risk_agent, "get_lightning_alerts", fake_get_lightning_alerts)
 
     weather = {"wave_height_m": 1.0, "wind_speed_kmh": 15.0}
     output, trace = await risk_agent.run_risk_agent(10.0, 76.0, weather)
 
     assert output["verdict"] == "safe"
     assert trace.agent == "risk"
+    assert set(trace.sources) == {"gdacs-cyclone-tracker", "cached-lightning-snapshot"}
+    # or() semantics: cyclone is live but lightning is cached -> whole result is cached
     assert trace.is_cached is True
+    # max() semantics: latest of the two fetched_at timestamps
+    assert trace.fetched_at == datetime(2026, 9, 15, 6, 0, 0, tzinfo=timezone.utc)

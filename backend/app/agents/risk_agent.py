@@ -1,4 +1,4 @@
-from app.connectors.alerts import get_alerts
+from app.connectors.alerts import get_cyclone_alerts, get_lightning_alerts
 from app.schemas import TraceEntry
 
 WAVE_HEIGHT_UNSAFE_M = 2.5
@@ -34,15 +34,20 @@ def _assess(weather: dict, alerts_data: dict) -> tuple[str, list[str]]:
 
 
 async def run_risk_agent(lat: float, lon: float, weather: dict) -> tuple[dict, TraceEntry]:
-    alerts_result = await get_alerts(lat, lon)
-    verdict, reasons = _assess(weather, alerts_result.data)
+    cyclone_result = await get_cyclone_alerts(lat, lon)
+    lightning_result = await get_lightning_alerts(lat, lon)
+    alerts_data = {
+        "cyclone_alerts": cyclone_result.data["cyclone_alerts"],
+        "lightning_alerts": lightning_result.data["lightning_alerts"],
+    }
+    verdict, reasons = _assess(weather, alerts_data)
     output = {"verdict": verdict, "reasons": reasons}
     trace = TraceEntry(
         agent="risk",
         inputs={"lat": lat, "lon": lon},
         output=output,
-        sources=[alerts_result.source],
-        fetched_at=alerts_result.fetched_at,
-        is_cached=alerts_result.is_cached,
+        sources=[cyclone_result.source, lightning_result.source],
+        fetched_at=max(cyclone_result.fetched_at, lightning_result.fetched_at),
+        is_cached=cyclone_result.is_cached or lightning_result.is_cached,
     )
     return output, trace

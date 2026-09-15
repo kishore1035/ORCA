@@ -25,6 +25,9 @@ def _mock_all_connectors():
     respx.get(url__regex=r"erdMH1chla1day\.json").mock(
         return_value=httpx.Response(200, json={"table": {"rows": [["t", 9.93, 76.27, 0.35]]}})
     )
+    respx.get(url__regex=r"gdacs\.org/gdacsapi/api/events/geteventlist/SEARCH").mock(
+        return_value=httpx.Response(200, json={"features": []})
+    )
 
 
 def _fake_plan(intent: str, agents: list[str]) -> dict:
