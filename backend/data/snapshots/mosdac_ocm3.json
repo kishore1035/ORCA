@@ -1,0 +1,21 @@
+{
+  "source": "ISRO-MOSDAC",
+  "fetched_at": "2026-09-14T08:00:00Z",
+  "data_status": "HISTORICAL",
+  "data": {
+    "satellite": "EOS-06 (Oceansat-3)",
+    "instrument": "Ocean Colour Monitor (OCM-3)",
+    "product_level": "Level-3 Daily Bio-optical Composite",
+    "region": "Karnataka Coastal Sector",
+    "observation_date": "2026-09-14",
+    "chlorophyll_mg_m3": 0.38,
+    "kd_490_per_meter": 0.12,
+    "total_suspended_matter_g_m3": 4.2,
+    "sst_celsius": 28.3,
+    "thermal_front_proximity_km": 14.5,
+    "chlorophyll_front_proximity_km": 11.2,
+    "ocean_color_status": "Favorable phytoplankton concentration along coastal upwelling boundary",
+    "valid_from": "2026-09-14T00:00:00Z",
+    "valid_until": "2026-09-15T00:00:00Z"
+  }
+}

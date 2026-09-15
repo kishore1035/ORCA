@@ -1,0 +1,59 @@
+{
+  "source": "INCOIS",
+  "fetched_at": "2026-09-15T20:00:00Z",
+  "data_status": "CACHED",
+  "data": {
+    "location": "Mangaluru Coastal Waters",
+    "latitude": 12.9141,
+    "longitude": 74.8560,
+    "forecast_issued": "2026-09-15T18:00:00Z",
+    "model_sources": {
+      "wave": "INCOIS-WW3 (WaveWatch III)",
+      "wind": "NCMRWF-UM (Unified Model)",
+      "currents": "INCOIS-ROMS (Regional Ocean Modeling System)",
+      "sst": "INCOIS-OOS"
+    },
+    "current_conditions": {
+      "significant_wave_height": 2.3,
+      "wave_period": 7.8,
+      "swell_height": 1.9,
+      "swell_period": 12.1,
+      "wind_speed_kmh": 28.5,
+      "wind_speed_ms": 7.9,
+      "wind_direction_deg": 260.0,
+      "surface_current_speed_ms": 0.45,
+      "surface_current_direction_deg": 335.0,
+      "sst_celsius": 28.4
+    },
+    "hourly_forecast": [
+      {
+        "time": "2026-09-16T06:00:00Z",
+        "significant_wave_height": 2.3,
+        "wave_period": 7.8,
+        "swell_height": 1.9,
+        "swell_period": 12.1,
+        "wind_speed_kmh": 28.5,
+        "wind_direction_deg": 260.0,
+        "surface_current_speed_ms": 0.45,
+        "surface_current_direction_deg": 335.0,
+        "sst_celsius": 28.4,
+        "valid_from": "2026-09-16T05:00:00Z",
+        "valid_until": "2026-09-16T07:00:00Z"
+      },
+      {
+        "time": "2026-09-16T11:00:00Z",
+        "significant_wave_height": 1.4,
+        "wave_period": 6.5,
+        "swell_height": 1.1,
+        "swell_period": 10.0,
+        "wind_speed_kmh": 16.2,
+        "wind_direction_deg": 285.0,
+        "surface_current_speed_ms": 0.28,
+        "surface_current_direction_deg": 320.0,
+        "sst_celsius": 28.6,
+        "valid_from": "2026-09-16T10:00:00Z",
+        "valid_until": "2026-09-16T12:00:00Z"
+      }
+    ]
+  }
+}
