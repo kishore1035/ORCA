@@ -26,7 +26,9 @@ ORCA: an agentic marine-intelligence assistant (Phase 1 of a larger platform). A
 
 **Agents (`backend/app/agents/`)** are thin: each wraps one or more connectors, adds real domain logic (threshold checks, correlation scoring), and returns `(output_dict, TraceEntry)`. The only two agents that call an LLM are `planner.py` (structured-output intent/plan extraction) and `reporting_agent.py` (final NL synthesis) — both via `app/llm.py`.
 
-**LLM constraint:** Google Gemini free tier (`gemini-3.5-flash` via `google-genai`, `GEMINI_API_KEY`) — no paid API of any kind anywhere in this project. This is a deliberate substitution for whatever the original spec assumed; don't reintroduce Anthropic/OpenAI/other paid LLM calls. (Note: the original Phase 1 implementation used `gemini-2.5-flash`, which Google deprecated for new API keys; `gemini-3.6-flash` was tried next but returned persistent 503s under load; settled on `gemini-3.5-flash`, confirmed stable and multilingual-capable end-to-end on 2026-09-15.)
+**LLM constraint:** a two-provider fallback chain implemented in `app/llm.py`'s `LLMClient` — no paid-per-token API of any kind for either provider. Priority provider is **Omniroute**, a local OpenAI-compatible proxy at `http://127.0.0.1:20128/v1` (`OMNIROUTE_API_KEY`); it reliably enforces JSON-schema-constrained structured output (`response_format: json_schema`), which the planner depends on. Fallback provider is **Ollama Cloud** (`https://ollama.com/api`, `OLLAMA_API_KEY`, model `gemma4:31b`) for when Omniroute is unreachable — Ollama Cloud does *not* reliably honor schema constraints, so its path does manual JSON extraction from the response text with one retry before giving up. `LLMClient` exposes `generate_text(system_prompt, user_message)` and `generate_structured(system_prompt, user_message, schema)`; agents never talk to a provider SDK directly. Both agents that call an LLM (`planner.py`, `reporting_agent.py`) go through this client.
+
+*Portability caveat:* Omniroute only exists on the machine it was configured on (`127.0.0.1`) — the app will only reach it when run from that same machine with the proxy already running. Anywhere else (a fresh clone, a deploy target, a different developer's machine), only the Ollama Cloud fallback path is reachable. (History: the original Phase 1 implementation used Google Gemini's free tier, which broke when `gemini-2.5-flash` was deprecated for new API keys and its successors proved unreliable/rate-limited on a fresh key; switched to the current two-provider chain on 2026-09-15.)
 
 **Other deliberate deviations from a naive reading of the spec** (see the plan's "Global Constraints" section for the full list): SST/chlorophyll come from NOAA ERDDAP (`jplMURSST41`, `erdMH1chla1day` — free, no registration) rather than Copernicus/NASA; the map uses Leaflet + OpenStreetMap tiles (no API key) rather than Mapbox. No database in Phase 1 — the frontend resends conversation history each turn.
 
@@ -36,7 +38,7 @@ ORCA: an agentic marine-intelligence assistant (Phase 1 of a larger platform). A
 
 Backend (from `backend/`):
 - `pytest -v` — run all tests; `pytest tests/test_<name>.py -v` for a single file
-- `uvicorn app.main:app --reload --port 8000` — run the dev server (requires `GEMINI_API_KEY` env var)
+- `uvicorn app.main:app --reload --port 8000` — run the dev server (requires `OMNIROUTE_API_KEY` and/or `OLLAMA_API_KEY` env vars; Omniroute only works when its local proxy is running on the same machine)
 
 Frontend (from `frontend/`):
 - `npm test` — run Vitest unit tests

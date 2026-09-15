@@ -1,6 +1,17 @@
 # backend/app/agents/planner.py
 from pydantic import BaseModel
-from app.llm import DEFAULT_MODEL
+
+PLAN_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "intent": {"type": "string"},
+        "place_name": {"type": ["string", "null"]},
+        "agents": {"type": "array", "items": {"type": "string"}},
+        "response_language": {"type": "string"},
+    },
+    "required": ["intent", "place_name", "agents", "response_language"],
+    "additionalProperties": False,
+}
 
 
 class PlanSchema(BaseModel):
@@ -26,14 +37,9 @@ Respond only with the requested JSON fields."""
 
 async def create_plan(client, message: str, history: list[dict]) -> dict:
     history_text = "\n".join(f"{h['role']}: {h['content']}" for h in history)
-    prompt = (
-        f"{PLANNER_SYSTEM_PROMPT}\n\nConversation so far:\n{history_text}\n\n"
-        f"User message: {message}"
+    prompt = f"Conversation so far:\n{history_text}\n\nUser message: {message}"
+    plan_dict = await client.generate_structured(
+        PLANNER_SYSTEM_PROMPT, prompt, PLAN_JSON_SCHEMA
     )
-    response = await client.aio.models.generate_content(
-        model=DEFAULT_MODEL,
-        contents=prompt,
-        config={"response_mime_type": "application/json", "response_schema": PlanSchema},
-    )
-    plan = PlanSchema.model_validate_json(response.text)
+    plan = PlanSchema.model_validate(plan_dict)
     return plan.model_dump()

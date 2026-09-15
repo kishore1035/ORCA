@@ -3,11 +3,8 @@ from app.agents.reporting_agent import synthesize_answer
 
 
 async def test_synthesize_answer_returns_llm_text():
-    fake_response = type("Resp", (), {"text": "It is safe to go out tomorrow morning."})()
     fake_client = type("Client", (), {})()
-    fake_client.aio = type("Aio", (), {})()
-    fake_client.aio.models = type("Models", (), {})()
-    fake_client.aio.models.generate_content = AsyncMock(return_value=fake_response)
+    fake_client.generate_text = AsyncMock(return_value="It is safe to go out tomorrow morning.")
 
     answer = await synthesize_answer(
         fake_client,
@@ -17,4 +14,4 @@ async def test_synthesize_answer_returns_llm_text():
     )
 
     assert answer == "It is safe to go out tomorrow morning."
-    fake_client.aio.models.generate_content.assert_awaited_once()
+    fake_client.generate_text.assert_awaited_once()

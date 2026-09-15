@@ -1,5 +1,3 @@
-from app.llm import DEFAULT_MODEL
-
 REPORTING_SYSTEM_PROMPT = """You are the final-answer agent for a marine intelligence assistant.
 You are given the user's question, the language to respond in, and structured results from
 specialist agents (weather, ocean analytics, risk, geospatial), each tagged with its data source.
@@ -22,10 +20,8 @@ async def synthesize_answer(
     agent_results: dict,
 ) -> str:
     prompt = (
-        f"{REPORTING_SYSTEM_PROMPT}\n\n"
         f"User question: {user_message}\n"
         f"Respond in language: {response_language}\n"
         f"Agent results:\n{_format_agent_results(agent_results)}"
     )
-    response = await client.aio.models.generate_content(model=DEFAULT_MODEL, contents=prompt)
-    return response.text
+    return await client.generate_text(REPORTING_SYSTEM_PROMPT, prompt)
