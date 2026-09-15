@@ -92,6 +92,17 @@ async def route_node(state: GraphState) -> GraphState:
     return {**state, "route_result": output, "trace": state["trace"] + [trace]}
 
 
+def _is_real_place(name) -> bool:
+    """LLMs (especially the Ollama Cloud fallback path, which doesn't reliably
+    honor JSON schema constraints) occasionally emit the literal string
+    "null"/"none" instead of a real JSON null for an unset place field. A
+    plain `if plan.get(...)` treats that non-empty string as truthy, which
+    previously sent a "no location given" query down the route/geospatial
+    path with a nonsense geocoded location. Treat those strings, and blank/
+    whitespace-only strings, as equivalent to no place given."""
+    return bool(name) and name.strip().lower() not in ("", "null", "none")
+
+
 _RESULT_KEY_TO_TRACE_AGENT = {
     "geo_result": "geospatial",
     "weather_result": "weather",
@@ -103,7 +114,8 @@ _RESULT_KEY_TO_TRACE_AGENT = {
 
 async def reporting_node(state: GraphState) -> GraphState:
     plan = state["plan"]
-    if not plan.get("place_name") and not (plan.get("start_place_name") and plan.get("end_place_name")):
+    has_route = _is_real_place(plan.get("start_place_name")) and _is_real_place(plan.get("end_place_name"))
+    if not _is_real_place(plan.get("place_name")) and not has_route:
         return {**state, "final_answer": NO_LOCATION_ANSWER}
     trace_by_agent = {entry.agent: entry for entry in state["trace"]}
     agent_results = {}
@@ -125,9 +137,9 @@ async def reporting_node(state: GraphState) -> GraphState:
 
 def _route_after_planner(state: GraphState) -> str:
     plan = state["plan"]
-    if plan.get("start_place_name") and plan.get("end_place_name"):
+    if _is_real_place(plan.get("start_place_name")) and _is_real_place(plan.get("end_place_name")):
         return "route"
-    if plan.get("place_name"):
+    if _is_real_place(plan.get("place_name")):
         return "geospatial"
     return "reporting"
 

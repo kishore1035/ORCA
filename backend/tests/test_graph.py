@@ -160,3 +160,30 @@ async def test_graph_routes_to_route_node_when_start_and_end_given(monkeypatch):
     assert result["final_answer"] == "The route is safe."
     _, _, _, agent_results = synthesize_mock.await_args.args
     assert "route_result" in agent_results
+
+
+async def test_graph_treats_literal_null_strings_as_no_location(monkeypatch):
+    # Regression: an unreliable LLM path (the Ollama Cloud fallback doesn't
+    # reliably honor JSON schema constraints) can emit the literal string
+    # "null" instead of JSON null. Observed live: this previously sent a
+    # no-location query down the route path with a nonsense geocoded location.
+    monkeypatch.setattr(
+        graph_module, "create_plan",
+        AsyncMock(return_value={
+            "intent": "check alerts", "place_name": "null",
+            "start_place_name": "null", "end_place_name": "null",
+            "agents": [], "response_language": "English",
+        }),
+    )
+    geospatial_mock = AsyncMock()
+    route_mock = AsyncMock()
+    monkeypatch.setattr(graph_module, "run_geospatial_agent", geospatial_mock)
+    monkeypatch.setattr(graph_module, "run_route_agent", route_mock)
+    monkeypatch.setattr(graph_module, "synthesize_answer", AsyncMock())
+
+    compiled = graph_module.build_graph(client=object())
+    result = await compiled.ainvoke({"message": "any alerts?", "history": []})
+
+    geospatial_mock.assert_not_awaited()
+    route_mock.assert_not_awaited()
+    assert "location" in result["final_answer"].lower()

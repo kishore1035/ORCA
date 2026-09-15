@@ -1,11 +1,16 @@
 import httpx
 import respx
 from unittest.mock import AsyncMock
+from app.connectors import alerts
 from app.graph import build_graph
 from app import graph as graph_module
 
 
-def _mock_all_connectors():
+def _mock_all_connectors(monkeypatch):
+    # Lightning is MQTT-based, not HTTP -- respx can't intercept it. Mock the
+    # listen step directly so e2e tests don't spend real seconds on a real
+    # broker connection for every risk check.
+    monkeypatch.setattr(alerts, "_listen_for_strikes", lambda prefixes, listen_seconds: [])
     respx.get("https://nominatim.openstreetmap.org/search").mock(
         return_value=httpx.Response(
             200, json=[{"lat": "9.93", "lon": "76.27", "display_name": "Kochi, Kerala, India"}]
@@ -36,7 +41,7 @@ def _fake_plan(intent: str, agents: list[str]) -> dict:
 
 @respx.mock
 async def test_is_it_safe_query_flags_calm_conditions(monkeypatch):
-    _mock_all_connectors()
+    _mock_all_connectors(monkeypatch)
     monkeypatch.setattr(
         graph_module, "create_plan", AsyncMock(return_value=_fake_plan("safety check", ["weather", "risk"]))
     )
@@ -52,7 +57,7 @@ async def test_is_it_safe_query_flags_calm_conditions(monkeypatch):
 
 @respx.mock
 async def test_fishing_zone_query_produces_pfz_likelihood(monkeypatch):
-    _mock_all_connectors()
+    _mock_all_connectors(monkeypatch)
     monkeypatch.setattr(
         graph_module, "create_plan", AsyncMock(return_value=_fake_plan("find PFZ", ["ocean_analytics"]))
     )
@@ -66,7 +71,7 @@ async def test_fishing_zone_query_produces_pfz_likelihood(monkeypatch):
 
 @respx.mock
 async def test_alerts_query_reports_no_active_alerts(monkeypatch):
-    _mock_all_connectors()
+    _mock_all_connectors(monkeypatch)
     monkeypatch.setattr(
         graph_module, "create_plan", AsyncMock(return_value=_fake_plan("check alerts", ["risk"]))
     )
@@ -82,7 +87,7 @@ async def test_alerts_query_reports_no_active_alerts(monkeypatch):
 
 @respx.mock
 async def test_followup_query_reuses_location_from_plan(monkeypatch):
-    _mock_all_connectors()
+    _mock_all_connectors(monkeypatch)
     monkeypatch.setattr(
         graph_module, "create_plan",
         AsyncMock(return_value=_fake_plan("safety check for later date", ["weather", "risk"])),
