@@ -1,0 +1,13 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "Example Marine Protected Area"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[75.8, 9.6], [75.9, 9.6], [75.9, 9.7], [75.8, 9.7], [75.8, 9.6]]]
+      }
+    }
+  ]
+}
