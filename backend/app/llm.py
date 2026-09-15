@@ -2,7 +2,7 @@
 from google import genai
 from app.config import get_settings
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
 
 
 def get_llm_client() -> genai.Client:
