@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { parseSSEChunk } from "./chatClient";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { parseSSEChunk, streamChat } from "./chatClient";
 
 describe("parseSSEChunk", () => {
   it("parses a trace event", () => {
@@ -18,5 +18,25 @@ describe("parseSSEChunk", () => {
 
   it("ignores blocks missing an event or data line", () => {
     expect(parseSSEChunk(": heartbeat\n\n")).toHaveLength(0);
+  });
+});
+
+describe("streamChat", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throws when the response is not ok, even if a body is present", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        body: new ReadableStream(),
+      })
+    );
+
+    const gen = streamChat("session-1", "hello", []);
+    await expect(gen.next()).rejects.toThrow("/chat failed: 500");
   });
 });

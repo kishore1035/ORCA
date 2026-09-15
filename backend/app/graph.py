@@ -1,3 +1,4 @@
+import logging
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
 from app.agents.planner import create_plan
@@ -9,6 +10,8 @@ from app.agents.reporting_agent import synthesize_answer
 from app.schemas import TraceEntry
 
 NO_LOCATION_ANSWER = "I need a location to answer that -- which coast, port, or coordinates should I check?"
+
+logger = logging.getLogger(__name__)
 
 
 class GraphState(TypedDict, total=False):
@@ -36,7 +39,8 @@ DEFAULT_PLAN = {
 async def planner_node(state: GraphState) -> GraphState:
     try:
         plan = await create_plan(state["_client"], state["message"], state.get("history", []))
-    except Exception:
+    except Exception as exc:
+        logger.warning("planner create_plan failed, falling back to default plan: %s", exc)
         plan = dict(DEFAULT_PLAN)
     trace_entry = TraceEntry(
         agent="planner",
@@ -73,14 +77,29 @@ async def ocean_analytics_node(state: GraphState) -> GraphState:
     return {**state, "ocean_result": output, "trace": state["trace"] + [trace]}
 
 
+_RESULT_KEY_TO_TRACE_AGENT = {
+    "geo_result": "geospatial",
+    "weather_result": "weather",
+    "ocean_result": "ocean_analytics",
+    "risk_result": "risk",
+}
+
+
 async def reporting_node(state: GraphState) -> GraphState:
     if not state["plan"].get("place_name"):
         return {**state, "final_answer": NO_LOCATION_ANSWER}
-    agent_results = {
-        key: state[key]
-        for key in ("geo_result", "weather_result", "ocean_result", "risk_result")
-        if state.get(key)
-    }
+    trace_by_agent = {entry.agent: entry for entry in state["trace"]}
+    agent_results = {}
+    for key, agent_name in _RESULT_KEY_TO_TRACE_AGENT.items():
+        if not state.get(key):
+            continue
+        entry = trace_by_agent.get(agent_name)
+        agent_results[key] = {
+            **state[key],
+            "_sources": entry.sources if entry else [],
+            "_fetched_at": entry.fetched_at.isoformat() if entry and entry.fetched_at else None,
+            "_is_cached": entry.is_cached if entry else False,
+        }
     answer = await synthesize_answer(
         state["_client"], state["message"], state["plan"]["response_language"], agent_results
     )

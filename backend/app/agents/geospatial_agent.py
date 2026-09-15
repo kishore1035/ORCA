@@ -16,6 +16,11 @@ async def run_geospatial_agent(place_name: str) -> tuple[dict, TraceEntry]:
         "boundary_distance_km": boundary_info["distance_km"],
         "within_warning_zone": boundary_info["distance_km"] <= PROXIMITY_WARNING_KM,
     }
+    if geo_result.is_cached:
+        # The live geocode failed and fell back to the committed snapshot, which
+        # always resolves to the same fixed location regardless of place_name --
+        # surface that so the trace/UI don't silently show the wrong place.
+        output["location_fallback"] = True
     trace = TraceEntry(
         agent="geospatial",
         inputs={"place_name": place_name},

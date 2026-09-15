@@ -5,12 +5,16 @@ from app.connectors import ocean_analytics
 
 @respx.mock
 async def test_get_sst_live_success():
-    respx.get(url__regex=r"jplMURSST41\.json").mock(
+    route = respx.get(url__regex=r"jplMURSST41\.json").mock(
         return_value=httpx.Response(200, json={"table": {"rows": [["2026-09-15T09:00:00Z", 10.0, 76.0, 29.1]]}})
     )
     result = await ocean_analytics.get_sst(10.0, 76.0)
     assert result.is_cached is False
     assert result.data["sst_celsius"] == 29.1
+
+    requested_url = str(route.calls[0].request.url)
+    assert "analysed_sst[(" in requested_url
+    assert "analysed_sst=" not in requested_url
 
 
 @respx.mock
@@ -23,9 +27,13 @@ async def test_get_sst_falls_back_on_failure():
 
 @respx.mock
 async def test_get_chlorophyll_live_success():
-    respx.get(url__regex=r"erdMH1chla1day\.json").mock(
+    route = respx.get(url__regex=r"erdMH1chla1day\.json").mock(
         return_value=httpx.Response(200, json={"table": {"rows": [["2026-09-15T00:00:00Z", 10.0, 76.0, 0.42]]}})
     )
     result = await ocean_analytics.get_chlorophyll(10.0, 76.0)
     assert result.is_cached is False
     assert result.data["chlorophyll_mg_m3"] == 0.42
+
+    requested_url = str(route.calls[0].request.url)
+    assert "chlorophyll[(" in requested_url
+    assert "chlorophyll=" not in requested_url

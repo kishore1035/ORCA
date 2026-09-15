@@ -28,6 +28,7 @@ export async function* streamChat(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, message, history }),
   });
+  if (!response.ok) throw new Error(`/chat failed: ${response.status}`);
   if (!response.body) throw new Error("No response body from /chat");
 
   const reader = response.body.getReader();
