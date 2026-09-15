@@ -15,7 +15,10 @@ proactive checks.
 """
 import math
 
-import searoute as sr
+try:
+    import searoute as sr
+except ImportError:
+    sr = None
 
 from app.agents.risk_agent import run_risk_agent
 from app.agents.weather_agent import run_weather_agent
@@ -64,6 +67,8 @@ def _sample_waypoints(coords: list[tuple[float, float]], max_count: int) -> list
 
 
 def _searoute_raw(start_lon: float, start_lat: float, end_lon: float, end_lat: float) -> dict:
+    if sr is None:
+        return {}
     return sr.searoute((start_lon, start_lat), (end_lon, end_lat))
 
 

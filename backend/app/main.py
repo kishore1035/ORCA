@@ -152,9 +152,12 @@ async def chat(request: ChatRequest, user: dict = Depends(_require_user)):
 
     async def event_stream():
         last_trace_len = 0
-        async for state in graph.astream(
-            {"message": request.message, "history": history}, stream_mode="values"
-        ):
+        graph_input = {
+            "message": request.message,
+            "history": history,
+            "location": request.location.model_dump() if request.location else None,
+        }
+        async for state in graph.astream(graph_input, stream_mode="values"):
             trace = state.get("trace", [])
             for entry in trace[last_trace_len:]:
                 if entry.agent == "geospatial" and "lat" in entry.output and "lon" in entry.output:
@@ -163,7 +166,15 @@ async def chat(request: ChatRequest, user: dict = Depends(_require_user)):
             last_trace_len = len(trace)
             if state.get("final_answer"):
                 db.append_message(request.session_id, "assistant", state["final_answer"])
-                payload = json.dumps({"answer": state["final_answer"]})
+                payload = json.dumps({
+                    "answer": state["final_answer"],
+                    "risk": state.get("risk_result"),
+                    "verification": state.get("verification_result"),
+                    "what_if": state.get("what_if_result"),
+                    "evidence": state.get("evidence"),
+                    "location": state.get("canonical_location"),
+                })
                 yield f"event: answer\ndata: {payload}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+

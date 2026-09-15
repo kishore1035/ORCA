@@ -95,12 +95,25 @@ export function subscribeToAlerts(
 export async function* streamChat(
   sessionId: string,
   message: string,
-  token: string
+  token?: string | null,
+  location?: { lat: number; lon: number } | null
 ): AsyncGenerator<ChatStreamEvent> {
+  const payload: Record<string, unknown> = { session_id: sessionId, message };
+  if (location && typeof location.lat === "number" && typeof location.lon === "number") {
+    payload.location = {
+      latitude: location.lat,
+      longitude: location.lon,
+      source: "USER_SELECTED",
+    };
+  }
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const response = await fetch(`${BACKEND_URL}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ session_id: sessionId, message }),
+    headers,
+    body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(`/chat failed: ${response.status}`);
   if (!response.body) throw new Error("No response body from /chat");

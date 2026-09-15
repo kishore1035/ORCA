@@ -1,0 +1,19 @@
+{
+  "source": "IMD",
+  "fetched_at": "2026-09-15T19:00:00Z",
+  "data_status": "CACHED",
+  "data": {
+    "station": "Mangaluru / Panambur",
+    "district": "Dakshina Kannada",
+    "state": "Karnataka",
+    "warning_level": "Yellow",
+    "warning_color": "#EAB308",
+    "warning_type": "Fishermen Warning & Squally Weather Advisory",
+    "coastal_bulletin": "Squally weather with wind speed reaching 40-50 kmph gusting to 60 kmph likely along and off Karnataka coast. Sea condition will be rough. Fishermen are advised not to venture into rough sea during morning hours.",
+    "port_warning_signal": 3,
+    "rainfall_forecast_mm": 18.5,
+    "cyclone_alerts": [],
+    "valid_from": "2026-09-16T00:00:00Z",
+    "valid_until": "2026-09-16T23:59:59Z"
+  }
+}
