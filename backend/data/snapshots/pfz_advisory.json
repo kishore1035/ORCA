@@ -1,0 +1,14 @@
+{
+  "fetched_at": "2026-09-16T09:00:00+00:00",
+  "data": {
+    "sector": "SEC005",
+    "nearest_landing_center": "Kunzhathur",
+    "distance_from_query_km": 6.3,
+    "direction": "SW",
+    "bearing_deg": 265,
+    "offshore_distance_km_range": [42, 47],
+    "depth_m_range": [50, 55],
+    "pfz_lat": 12.71,
+    "pfz_lon": 74.46472
+  }
+}

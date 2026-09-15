@@ -1,4 +1,5 @@
 from app.connectors.ocean_analytics import get_sst, get_chlorophyll, get_sst_trend
+from app.connectors.pfz import get_pfz_advisory
 from app.schemas import TraceEntry
 
 # Simplified, explicitly-labeled heuristic (not an official PFZ advisory algorithm):
@@ -66,6 +67,7 @@ async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, Trace
     sst_result = await get_sst(lat, lon)
     chl_result = await get_chlorophyll(lat, lon)
     trend_result = await get_sst_trend(lat, lon)
+    pfz_result = await get_pfz_advisory(lat, lon)
     sst_c = sst_result.data["sst_celsius"]
     chlorophyll = chl_result.data["chlorophyll_mg_m3"]
     trend = trend_result.data["sst_trend"]
@@ -80,13 +82,23 @@ async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, Trace
         "sst_trend_direction": _trend_direction(trend),
         "productivity_trend": productivity_trend,
         "productivity_note": productivity_note,
+        # Real INCOIS-issued PFZ advisory (connectors/pfz.py), independent of
+        # the SST/chlorophyll heuristic above -- a named coastal landing
+        # center plus the bearing/distance/depth offshore to its current
+        # advisory point, not another likelihood score.
+        "pfz_advisory": pfz_result.data,
     }
     trace = TraceEntry(
         agent="ocean_analytics",
         inputs={"lat": lat, "lon": lon},
         output=output,
-        sources=[sst_result.source, chl_result.source, trend_result.source],
-        fetched_at=max(sst_result.fetched_at, chl_result.fetched_at, trend_result.fetched_at),
-        is_cached=sst_result.is_cached or chl_result.is_cached or trend_result.is_cached,
+        sources=[sst_result.source, chl_result.source, trend_result.source, pfz_result.source],
+        fetched_at=max(
+            sst_result.fetched_at, chl_result.fetched_at, trend_result.fetched_at, pfz_result.fetched_at
+        ),
+        is_cached=sst_result.is_cached
+        or chl_result.is_cached
+        or trend_result.is_cached
+        or pfz_result.is_cached,
     )
     return output, trace

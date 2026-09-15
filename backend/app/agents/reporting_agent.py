@@ -15,6 +15,12 @@ Write a single clear, conversational answer:
   temperature data, not fish-catch statistics (no free catch dataset exists), so frame it as
   a change in ocean conditions relevant to fish aggregation, not a direct productivity/catch
   claim.
+- If the ocean_analytics result contains a "pfz_advisory" (a real INCOIS-issued Potential
+  Fishing Zone advisory -- a named coastal landing center plus the bearing/distance/depth
+  offshore to its current advisory point), lead a "where's the nearest fishing zone" answer
+  with it: this is an authoritative government advisory, not the "pfz_likelihood"
+  SST/chlorophyll heuristic above it, which is a separate, independent signal -- don't
+  conflate the two or present the heuristic as if it were the official advisory.
 - Never invent numbers that are not present in the provided agent results."""
 
 
