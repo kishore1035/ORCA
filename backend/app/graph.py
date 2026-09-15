@@ -6,7 +6,9 @@ from app.agents.weather_agent import run_weather_agent
 from app.agents.ocean_analytics_agent import run_ocean_analytics_agent
 from app.agents.risk_agent import run_risk_agent
 from app.agents.geospatial_agent import run_geospatial_agent
+from app.agents.route_agent import run_route_agent
 from app.agents.reporting_agent import synthesize_answer
+from app.connectors.geospatial import geocode
 from app.schemas import TraceEntry
 
 NO_LOCATION_ANSWER = "I need a location to answer that -- which coast, port, or coordinates should I check?"
@@ -24,6 +26,7 @@ class GraphState(TypedDict, total=False):
     ocean_result: dict
     risk_result: dict
     geo_result: dict
+    route_result: dict
     trace: list[TraceEntry]
     final_answer: str
 
@@ -31,6 +34,8 @@ class GraphState(TypedDict, total=False):
 DEFAULT_PLAN = {
     "intent": "general marine query",
     "place_name": None,
+    "start_place_name": None,
+    "end_place_name": None,
     "agents": ["weather"],
     "response_language": "English",
 }
@@ -77,16 +82,28 @@ async def ocean_analytics_node(state: GraphState) -> GraphState:
     return {**state, "ocean_result": output, "trace": state["trace"] + [trace]}
 
 
+async def route_node(state: GraphState) -> GraphState:
+    plan = state["plan"]
+    start = await geocode(plan["start_place_name"])
+    end = await geocode(plan["end_place_name"])
+    output, trace = await run_route_agent(
+        start.data["lat"], start.data["lon"], end.data["lat"], end.data["lon"]
+    )
+    return {**state, "route_result": output, "trace": state["trace"] + [trace]}
+
+
 _RESULT_KEY_TO_TRACE_AGENT = {
     "geo_result": "geospatial",
     "weather_result": "weather",
     "ocean_result": "ocean_analytics",
     "risk_result": "risk",
+    "route_result": "route",
 }
 
 
 async def reporting_node(state: GraphState) -> GraphState:
-    if not state["plan"].get("place_name"):
+    plan = state["plan"]
+    if not plan.get("place_name") and not (plan.get("start_place_name") and plan.get("end_place_name")):
         return {**state, "final_answer": NO_LOCATION_ANSWER}
     trace_by_agent = {entry.agent: entry for entry in state["trace"]}
     agent_results = {}
@@ -101,13 +118,18 @@ async def reporting_node(state: GraphState) -> GraphState:
             "_is_cached": entry.is_cached if entry else False,
         }
     answer = await synthesize_answer(
-        state["_client"], state["message"], state["plan"]["response_language"], agent_results
+        state["_client"], state["message"], plan["response_language"], agent_results
     )
     return {**state, "final_answer": answer}
 
 
 def _route_after_planner(state: GraphState) -> str:
-    return "geospatial" if state["plan"].get("place_name") else "reporting"
+    plan = state["plan"]
+    if plan.get("start_place_name") and plan.get("end_place_name"):
+        return "route"
+    if plan.get("place_name"):
+        return "geospatial"
+    return "reporting"
 
 
 def build_graph(client):
@@ -124,15 +146,19 @@ def build_graph(client):
     graph.add_node("weather", weather_node)
     graph.add_node("risk", risk_node)
     graph.add_node("ocean_analytics", ocean_analytics_node)
+    graph.add_node("route", route_node)
     graph.add_node("reporting", reporting_with_client)
 
     graph.set_entry_point("planner")
     graph.add_conditional_edges(
-        "planner", _route_after_planner, {"geospatial": "geospatial", "reporting": "reporting"}
+        "planner",
+        _route_after_planner,
+        {"geospatial": "geospatial", "route": "route", "reporting": "reporting"},
     )
     graph.add_edge("geospatial", "weather")
     graph.add_edge("weather", "risk")
     graph.add_edge("risk", "ocean_analytics")
     graph.add_edge("ocean_analytics", "reporting")
+    graph.add_edge("route", "reporting")
     graph.add_edge("reporting", END)
     return graph.compile()

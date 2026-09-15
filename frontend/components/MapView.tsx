@@ -1,8 +1,9 @@
 // frontend/components/MapView.tsx
 "use client";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { RouteWaypoint } from "@/lib/types";
 
 // Configure default marker icon for bundled apps
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -27,19 +28,59 @@ interface MapViewProps {
   lat: number | null;
   lon: number | null;
   label?: string;
+  route?: RouteWaypoint[];
 }
 
-export function MapView({ lat, lon, label }: MapViewProps) {
-  const center: [number, number] = lat != null && lon != null ? [lat, lon] : [10.0, 76.0];
+export function MapView({ lat, lon, label, route }: MapViewProps) {
+  const center: [number, number] =
+    route && route.length > 0
+      ? [route[0].lat, route[0].lon]
+      : lat != null && lon != null
+        ? [lat, lon]
+        : [10.0, 76.0];
   return (
-    <MapContainer center={center} zoom={lat != null ? 9 : 5} className="h-full w-full">
+    <MapContainer center={center} zoom={lat != null || route ? 9 : 5} className="h-full w-full">
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution="&copy; OpenStreetMap contributors"
       />
-      {lat != null && lon != null && (
+      {lat != null && lon != null && !route && (
         <Marker position={[lat, lon]}>{label && <Popup>{label}</Popup>}</Marker>
       )}
+      {route &&
+        route.slice(0, -1).map((wp, i) => {
+          const next = route[i + 1];
+          const segmentHazardous = wp.verdict === "unsafe" || next.verdict === "unsafe";
+          return (
+            <Polyline
+              key={`segment-${i}`}
+              positions={[
+                [wp.lat, wp.lon],
+                [next.lat, next.lon],
+              ]}
+              pathOptions={{ color: segmentHazardous ? "#dc2626" : "#2563eb", weight: 4 }}
+            />
+          );
+        })}
+      {route &&
+        route.map((wp, i) => (
+          <CircleMarker
+            key={`waypoint-${i}`}
+            center={[wp.lat, wp.lon]}
+            radius={7}
+            pathOptions={{
+              color: wp.verdict === "unsafe" ? "#dc2626" : "#16a34a",
+              fillColor: wp.verdict === "unsafe" ? "#dc2626" : "#16a34a",
+              fillOpacity: 0.9,
+            }}
+          >
+            <Popup>
+              {wp.verdict === "unsafe" ? "⚠️ Hazardous" : "✓ Safe"}
+              <br />
+              {wp.reasons.join("; ")}
+            </Popup>
+          </CircleMarker>
+        ))}
     </MapContainer>
   );
 }

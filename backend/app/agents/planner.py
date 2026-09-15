@@ -6,10 +6,14 @@ PLAN_JSON_SCHEMA = {
     "properties": {
         "intent": {"type": "string"},
         "place_name": {"type": ["string", "null"]},
+        "start_place_name": {"type": ["string", "null"]},
+        "end_place_name": {"type": ["string", "null"]},
         "agents": {"type": "array", "items": {"type": "string"}},
         "response_language": {"type": "string"},
     },
-    "required": ["intent", "place_name", "agents", "response_language"],
+    "required": [
+        "intent", "place_name", "start_place_name", "end_place_name", "agents", "response_language",
+    ],
     "additionalProperties": False,
 }
 
@@ -17,6 +21,8 @@ PLAN_JSON_SCHEMA = {
 class PlanSchema(BaseModel):
     intent: str
     place_name: str | None
+    start_place_name: str | None = None
+    end_place_name: str | None = None
     agents: list[str]
     response_language: str
 
@@ -27,6 +33,10 @@ fishermen and coastal stakeholders. Given the user's message and conversation hi
 - the place/location they mean (reuse the location from earlier turns if this message is a
   follow-up like "what about tomorrow?" that doesn't repeat it); null if genuinely no location
   has ever been given
+- start_place_name and end_place_name: ONLY when the user is asking about a ROUTE or the safest
+  way to travel BETWEEN two named places (e.g. "safest route from Kochi to Alappuzha"). Both null
+  for every other query, including single-location queries -- do not populate these unless the
+  message names two distinct places connected by travel/route intent.
 - which specialist agents are needed, from: "weather" (wind/wave/swell), "ocean_analytics"
   (SST/chlorophyll/fishing-zone likelihood), "risk" (safety go/no-go, alerts), "geospatial"
   (location resolution, protected-area/boundary proximity)

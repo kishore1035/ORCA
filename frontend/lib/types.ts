@@ -23,3 +23,10 @@ export interface ProactiveAlert {
   lat: number;
   lon: number;
 }
+
+export interface RouteWaypoint {
+  lat: number;
+  lon: number;
+  verdict: string;
+  reasons: string[];
+}

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 from app import graph as graph_module
-from app.schemas import TraceEntry
+from app.schemas import ConnectorResult, TraceEntry
 
 
 def _trace(agent_name: str) -> TraceEntry:
@@ -117,3 +117,46 @@ async def test_reporting_node_passes_staleness_info_to_synthesize_answer(monkeyp
     assert agent_results["weather_result"]["_is_cached"] is True
     assert agent_results["weather_result"]["_fetched_at"] == "2026-09-10T00:00:00+00:00"
     assert agent_results["risk_result"]["_is_cached"] is False
+
+
+async def test_graph_routes_to_route_node_when_start_and_end_given(monkeypatch):
+    monkeypatch.setattr(
+        graph_module, "create_plan",
+        AsyncMock(return_value={
+            "intent": "safest route", "place_name": None,
+            "start_place_name": "Kochi", "end_place_name": "Alappuzha",
+            "agents": [], "response_language": "English",
+        }),
+    )
+
+    def fake_geocode(place_name):
+        coords = {"Kochi": (9.97, 76.24), "Alappuzha": (9.49, 76.33)}
+        lat, lon = coords[place_name]
+        return ConnectorResult(
+            data={"lat": lat, "lon": lon, "display_name": place_name},
+            source="nominatim", fetched_at=datetime.now(timezone.utc), is_cached=False,
+        )
+
+    monkeypatch.setattr(graph_module, "geocode", AsyncMock(side_effect=fake_geocode))
+    monkeypatch.setattr(
+        graph_module, "run_route_agent",
+        AsyncMock(return_value=(
+            {"waypoints": [], "overall_verdict": "safe"}, _trace("route"),
+        )),
+    )
+    geospatial_mock = AsyncMock()
+    monkeypatch.setattr(graph_module, "run_geospatial_agent", geospatial_mock)
+    synthesize_mock = AsyncMock(return_value="The route is safe.")
+    monkeypatch.setattr(graph_module, "synthesize_answer", synthesize_mock)
+
+    compiled = graph_module.build_graph(client=object())
+    result = await compiled.ainvoke(
+        {"message": "what's the safest route from Kochi to Alappuzha?", "history": []}
+    )
+
+    geospatial_mock.assert_not_awaited()
+    assert [t.agent for t in result["trace"]] == ["planner", "route"]
+    assert result["route_result"]["overall_verdict"] == "safe"
+    assert result["final_answer"] == "The route is safe."
+    _, _, _, agent_results = synthesize_mock.await_args.args
+    assert "route_result" in agent_results
