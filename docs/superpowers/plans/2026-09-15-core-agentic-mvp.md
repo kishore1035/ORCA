@@ -61,9 +61,10 @@ Save as `backend/requirements.txt`.
 ```ini
 [pytest]
 asyncio_mode = auto
+pythonpath = .
 ```
 
-Save as `backend/pytest.ini`.
+Save as `backend/pytest.ini`. The `pythonpath = .` line (a builtin pytest option since 7.0, resolved relative to this ini file) is what makes `from app... import ...` resolve when running plain `pytest` from `backend/` — without it there is nothing putting `backend/` on `sys.path`, since `tests/` has no `__init__.py` and there is no editable install.
 
 - [ ] **Step 3: Create the settings module**
 
@@ -1700,7 +1701,7 @@ async def test_graph_runs_full_pipeline_when_location_present(monkeypatch):
     result = await compiled.ainvoke({"message": "is it safe near Kochi?", "history": []})
 
     trace_agents = [t.agent for t in result["trace"]]
-    assert trace_agents == ["geospatial", "weather", "risk", "ocean_analytics"]
+    assert trace_agents == ["planner", "geospatial", "weather", "risk", "ocean_analytics"]
     assert result["final_answer"] == "It is safe to go out."
 
 
@@ -1783,7 +1784,13 @@ async def planner_node(state: GraphState) -> GraphState:
         plan = await create_plan(state["_client"], state["message"], state.get("history", []))
     except Exception:
         plan = dict(DEFAULT_PLAN)
-    return {**state, "plan": plan, "trace": []}
+    trace_entry = TraceEntry(
+        agent="planner",
+        inputs={"message": state["message"]},
+        output=plan,
+        sources=[],
+    )
+    return {**state, "plan": plan, "trace": [trace_entry]}
 
 
 async def geospatial_node(state: GraphState) -> GraphState:
@@ -2054,7 +2061,7 @@ async def test_is_it_safe_query_flags_calm_conditions(monkeypatch):
 
     assert result["risk_result"]["verdict"] == "safe"
     assert result["final_answer"] == "Safe to go out."
-    assert [t.agent for t in result["trace"]] == ["geospatial", "weather", "risk", "ocean_analytics"]
+    assert [t.agent for t in result["trace"]] == ["planner", "geospatial", "weather", "risk", "ocean_analytics"]
 
 
 @respx.mock
