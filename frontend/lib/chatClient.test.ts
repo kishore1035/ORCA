@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { parseSSEChunk, streamChat, fetchHistory, subscribeToAlerts, signup, login } from "./chatClient";
+import {
+  parseSSEChunk,
+  streamChat,
+  fetchHistory,
+  subscribeToAlerts,
+  signup,
+  login,
+  fetchVapidPublicKey,
+  subscribePush,
+} from "./chatClient";
 
 describe("parseSSEChunk", () => {
   it("parses a trace event", () => {
@@ -162,5 +171,55 @@ describe("login", () => {
     );
 
     await expect(login("a@example.com", "wrong")).rejects.toThrow("Invalid email or password");
+  });
+});
+
+describe("fetchVapidPublicKey", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns the public key on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ public_key: "BBBB" }) })
+    );
+
+    expect(await fetchVapidPublicKey()).toBe("BBBB");
+  });
+
+  it("throws when the response is not ok", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+
+    await expect(fetchVapidPublicKey()).rejects.toThrow("/push/vapid-public-key failed: 500");
+  });
+});
+
+describe("subscribePush", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts the subscription with an auth header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await subscribePush("session-1", "token-1", { endpoint: "https://push.example.com/x" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/push/subscribe"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer token-1" }),
+      })
+    );
+  });
+
+  it("throws when the response is not ok", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+    await expect(subscribePush("session-1", "token-1", { endpoint: "x" })).rejects.toThrow(
+      "/push/subscribe failed: 403"
+    );
   });
 });

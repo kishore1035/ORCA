@@ -6,6 +6,7 @@ import { AuthGate } from "@/components/AuthGate";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ReasoningTrace } from "@/components/ReasoningTrace";
 import { streamChat, fetchHistory, subscribeToAlerts } from "@/lib/chatClient";
+import { isPushSupported, subscribeToPush } from "@/lib/push";
 import { AuthResponse, ChatMessage, ProactiveAlert, RouteWaypoint, TraceEntry } from "@/lib/types";
 
 const MapView = dynamic(() => import("@/components/MapView").then((m) => m.MapView), { ssr: false });
@@ -86,6 +87,17 @@ function ChatApp({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void 
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId] = useState(() => getOrCreateSessionId(auth.email));
   const [activeAlert, setActiveAlert] = useState<ProactiveAlert | null>(null);
+  const [pushStatus, setPushStatus] = useState<"idle" | "subscribing" | "subscribed" | "error">("idle");
+
+  async function handleEnablePush() {
+    setPushStatus("subscribing");
+    try {
+      await subscribeToPush(sessionId, auth.token);
+      setPushStatus("subscribed");
+    } catch {
+      setPushStatus("error");
+    }
+  }
 
   useEffect(() => {
     fetchHistory(sessionId, auth.token)
@@ -133,7 +145,18 @@ function ChatApp({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void 
     <main className="flex flex-col h-screen">
       <div className="flex items-center justify-between px-4 py-1 border-b text-sm text-slate-600">
         <span>{auth.email}</span>
-        <button onClick={onLogout}>Log out</button>
+        <div className="flex items-center gap-3">
+          {isPushSupported() && pushStatus !== "subscribed" && (
+            <button onClick={handleEnablePush} disabled={pushStatus === "subscribing"}>
+              {pushStatus === "subscribing"
+                ? "Enabling..."
+                : pushStatus === "error"
+                ? "Couldn't enable notifications, retry?"
+                : "Enable hazard push notifications"}
+            </button>
+          )}
+          <button onClick={onLogout}>Log out</button>
+        </div>
       </div>
       {activeAlert && (
         <div className="bg-amber-100 dark:bg-amber-950 border-b border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 px-4 py-2 flex items-center justify-between gap-4">

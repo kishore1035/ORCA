@@ -44,6 +44,26 @@ export function parseSSEChunk(chunk: string): ChatStreamEvent[] {
   return events;
 }
 
+export async function fetchVapidPublicKey(): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/push/vapid-public-key`);
+  if (!response.ok) throw new Error(`/push/vapid-public-key failed: ${response.status}`);
+  const body = await response.json();
+  return body.public_key;
+}
+
+export async function subscribePush(
+  sessionId: string,
+  token: string,
+  subscription: PushSubscriptionJSON
+): Promise<void> {
+  const response = await fetch(`${BACKEND_URL}/push/subscribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ session_id: sessionId, subscription }),
+  });
+  if (!response.ok) throw new Error(`/push/subscribe failed: ${response.status}`);
+}
+
 export async function fetchHistory(sessionId: string, token: string): Promise<ChatMessage[]> {
   const response = await fetch(`${BACKEND_URL}/sessions/${sessionId}/history`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -54,9 +74,9 @@ export async function fetchHistory(sessionId: string, token: string): Promise<Ch
 
 /**
  * Subscribes to proactive hazard alerts for a session over a long-lived SSE
- * connection. In-app only: the alert stops arriving the moment the tab
- * closes or navigates away -- there is no service worker / push
- * subscription behind this, by design (see backend/app/alerting.py).
+ * connection -- this delivers alerts while a tab is open. For delivery with
+ * no tab open, see lib/push.ts's real Web Push subscription (separate,
+ * opt-in, requires the browser to support it).
  * Returns an unsubscribe function.
  */
 export function subscribeToAlerts(

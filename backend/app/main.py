@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from app import alerting, auth, db
+from app import alerting, auth, db, push
 from app.config import get_settings
 from app.llm import get_llm_client
 from app.graph import build_graph
@@ -13,6 +13,7 @@ from app.schemas import (
     ChatMessage,
     ChatRequest,
     LoginRequest,
+    PushSubscribeRequest,
     SignupRequest,
 )
 
@@ -89,6 +90,21 @@ async def login(request: LoginRequest) -> AuthResponse:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = auth.create_token(user["id"], user["email"])
     return AuthResponse(token=token, user_id=user["id"], email=user["email"])
+
+
+@app.get("/push/vapid-public-key")
+async def vapid_public_key() -> dict:
+    return {"public_key": push.get_vapid_public_key_b64()}
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: PushSubscribeRequest, user: dict = Depends(_require_user)) -> dict:
+    try:
+        db.ensure_session(request.session_id, user["user_id"])
+    except db.SessionOwnershipError:
+        raise HTTPException(status_code=403, detail="Session belongs to another user")
+    db.save_push_subscription(request.session_id, json.dumps(request.subscription))
+    return {"status": "subscribed"}
 
 
 @app.get("/sessions/{session_id}/history")

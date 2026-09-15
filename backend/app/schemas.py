@@ -49,3 +49,8 @@ class AuthResponse(BaseModel):
     token: str
     user_id: int
     email: str
+
+
+class PushSubscribeRequest(BaseModel):
+    session_id: str
+    subscription: dict[str, Any]

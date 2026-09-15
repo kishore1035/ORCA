@@ -1,20 +1,23 @@
-"""Proactive hazard alerting, scoped narrowly per an explicit design decision:
-in-app only, delivered over a long-lived SSE connection while the browser tab
-is open -- no service worker, no push subscription, no email/SMS. A session
-with no open tab simply misses the alert; this is a real limitation, not
-hidden.
+"""Proactive hazard alerting, delivered two ways:
+
+1. In-app, over a long-lived SSE connection, while the browser tab is open
+   (subscribe/unsubscribe/publish below).
+2. Real Web Push (app/push.py), reaching a session even with no tab open --
+   as long as it has subscribed via the browser's PushManager at least once
+   and the OS/browser push service is willing to deliver (best-effort, no
+   delivery guarantee is possible with any push system).
 
 Every `interval_seconds`, every session with a known last-resolved location
 (set after a normal /chat turn) gets re-checked against live weather + risk
 conditions -- the same weather_agent/risk_agent used by the main pipeline,
 not new hazard logic. An alert is only published on a TRANSITION into
 "unsafe" (not repeated on every poll while still unsafe, and not on
-recovering to "safe"), to avoid spamming an open tab.
+recovering to "safe"), to avoid spamming a subscriber.
 """
 import asyncio
 import logging
 
-from app import db
+from app import db, push
 from app.agents.risk_agent import run_risk_agent
 from app.agents.weather_agent import run_weather_agent
 
@@ -46,6 +49,21 @@ def publish(session_id: str, alert: dict) -> None:
         queue.put_nowait(alert)
 
 
+async def _send_web_push(session_id: str, alert: dict) -> None:
+    subscriptions = db.get_push_subscriptions(session_id)
+    if not subscriptions:
+        return
+    payload = {
+        "title": f"ORCA hazard alert: {alert['verdict']}",
+        "body": "; ".join(alert["reasons"]),
+    }
+    for subscription in subscriptions:
+        try:
+            await asyncio.to_thread(push.send_push, subscription, payload)
+        except Exception:
+            logger.warning("web push delivery failed for session %s", session_id, exc_info=True)
+
+
 async def check_hazards_once() -> None:
     for tracked in db.get_tracked_sessions():
         session_id, lat, lon = tracked["session_id"], tracked["lat"], tracked["lon"]
@@ -59,10 +77,9 @@ async def check_hazards_once() -> None:
         verdict = risk["verdict"]
         previous_verdict = db.get_last_verdict(session_id)
         if verdict == "unsafe" and previous_verdict != "unsafe":
-            publish(
-                session_id,
-                {"type": "alert", "verdict": verdict, "reasons": risk["reasons"], "lat": lat, "lon": lon},
-            )
+            alert = {"type": "alert", "verdict": verdict, "reasons": risk["reasons"], "lat": lat, "lon": lon}
+            publish(session_id, alert)
+            await _send_web_push(session_id, alert)
         db.set_last_verdict(session_id, verdict)
 
 

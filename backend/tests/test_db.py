@@ -1,3 +1,4 @@
+import json
 import pytest
 from app import db
 
@@ -145,3 +146,37 @@ def test_get_session_owner_returns_none_for_unknown_session(tmp_path, monkeypatc
     db.init_db()
 
     assert db.get_session_owner("never-seen") is None
+
+
+def test_save_and_get_push_subscription(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    sub = json.dumps({"endpoint": "https://push.example.com/x", "keys": {"p256dh": "a", "auth": "b"}})
+    db.save_push_subscription("s1", sub)
+
+    subs = db.get_push_subscriptions("s1")
+    assert len(subs) == 1
+    assert subs[0]["endpoint"] == "https://push.example.com/x"
+
+
+def test_get_push_subscriptions_empty_for_unknown_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    assert db.get_push_subscriptions("never-seen") == []
+
+
+def test_save_push_subscription_dedupes_by_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+
+    sub = json.dumps({"endpoint": "https://push.example.com/x", "keys": {"p256dh": "a", "auth": "b"}})
+    db.save_push_subscription("s1", sub)
+    # Browser re-subscribes with the same endpoint but updated keys.
+    sub_updated = json.dumps({"endpoint": "https://push.example.com/x", "keys": {"p256dh": "new", "auth": "b"}})
+    db.save_push_subscription("s1", sub_updated)
+
+    subs = db.get_push_subscriptions("s1")
+    assert len(subs) == 1
+    assert subs[0]["keys"]["p256dh"] == "new"

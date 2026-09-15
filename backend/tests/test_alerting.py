@@ -1,5 +1,6 @@
 import asyncio
-from app import alerting, db
+import json
+from app import alerting, db, push
 
 
 async def test_subscribe_publish_delivers_to_queue():
@@ -49,6 +50,34 @@ async def test_check_hazards_once_alerts_on_transition_to_unsafe(tmp_path, monke
         alerting.unsubscribe("s3", queue)
 
     assert db.get_last_verdict("s3") == "unsafe"
+
+
+async def test_check_hazards_once_sends_web_push_when_subscribed(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+    db.set_last_location("s3b", 9.9679, 76.2444)
+    db.set_last_verdict("s3b", "safe")
+    db.save_push_subscription(
+        "s3b", json.dumps({"endpoint": "https://push.example.com/x", "keys": {"p256dh": "a", "auth": "b"}})
+    )
+
+    async def fake_run_weather_agent(lat, lon):
+        return {"wave_height_m": 3.0, "wind_speed_kmh": 10.0}, None
+
+    async def fake_run_risk_agent(lat, lon, weather):
+        return {"verdict": "unsafe", "reasons": ["Wave height 3.0m exceeds safe threshold"]}, None
+
+    sent = []
+    monkeypatch.setattr(alerting, "run_weather_agent", fake_run_weather_agent)
+    monkeypatch.setattr(alerting, "run_risk_agent", fake_run_risk_agent)
+    monkeypatch.setattr(push, "send_push", lambda sub, payload: sent.append((sub, payload)) or True)
+
+    await alerting.check_hazards_once()
+
+    assert len(sent) == 1
+    subscription, payload = sent[0]
+    assert subscription["endpoint"] == "https://push.example.com/x"
+    assert "unsafe" in payload["title"]
 
 
 async def test_check_hazards_once_does_not_realert_while_still_unsafe(tmp_path, monkeypatch):

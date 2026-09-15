@@ -7,6 +7,7 @@ is now owned by exactly one user_id; anonymous sessions are no longer
 possible once auth is enforced at the endpoint layer (see app/auth.py and
 app/main.py).
 """
+import json
 import sqlite3
 from pathlib import Path
 
@@ -55,6 +56,15 @@ def init_db() -> None:
                 session_id TEXT NOT NULL,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                subscription_json TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             )"""
@@ -194,3 +204,37 @@ def set_last_verdict(session_id: str, verdict: str) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+def save_push_subscription(session_id: str, subscription_json: str) -> None:
+    """Dedupes by endpoint (a browser re-subscribing sends the same
+    endpoint again) so this session doesn't accumulate stale duplicates."""
+    endpoint = json.loads(subscription_json).get("endpoint")
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, subscription_json FROM push_subscriptions WHERE session_id = ?",
+            (session_id,),
+        ).fetchall()
+        for row_id, existing_json in rows:
+            if json.loads(existing_json).get("endpoint") == endpoint:
+                conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (row_id,))
+        conn.execute(
+            "INSERT INTO push_subscriptions (session_id, subscription_json) VALUES (?, ?)",
+            (session_id, subscription_json),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_push_subscriptions(session_id: str) -> list[dict]:
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT subscription_json FROM push_subscriptions WHERE session_id = ?",
+            (session_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [json.loads(row[0]) for row in rows]
