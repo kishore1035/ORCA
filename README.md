@@ -44,6 +44,39 @@ deviation from the original spec, and why each one was made — it's written for
 assistant working in this repo, but it's the most complete and current technical
 reference either way.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    U[User message] --> P[planner]
+    P -->|two locations| R[route]
+    P -->|one location| G[geospatial]
+    P -->|no location| RP[reporting]
+    G --> W[weather]
+    W --> RK[risk]
+    RK --> O[ocean_analytics]
+    O --> RP
+    R --> RP
+    RP --> A[Answer + trace]
+```
+
+## Wireframe
+
+```
++----------------------------------------------------------------+
+| Hazard alert banner (shown only when active)         [Dismiss] |
++------------------+------------------+----------------------------+
+| Chat panel       | Reasoning trace  | Map                        |
+|                  |                  |                            |
+| [assistant] ...  | planner          | [tiles]                    |
+| [user] ...       | geospatial       | marker / route + waypoints |
+| [assistant] ...  | weather          |                            |
+|                  | risk             |                            |
+|                  | ocean_analytics  |                            |
+| [input] [Send]   |                  |                            |
++------------------+------------------+----------------------------+
+```
+
 ## Data sources (all free, no paid API of any kind)
 
 | Data | Source |
