@@ -33,6 +33,11 @@ export default function Home() {
           setMessages((prev) => [...prev, { role: "assistant", content: event.data.answer }]);
         }
       }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Something went wrong while processing your request. Please try again." },
+      ]);
     } finally {
       setIsStreaming(false);
     }
