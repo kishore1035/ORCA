@@ -33,3 +33,19 @@ class ChatResponse(BaseModel):
     answer: str
     trace: list[TraceEntry]
     geojson: dict[str, Any] | None = None
+
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user_id: int
+    email: str

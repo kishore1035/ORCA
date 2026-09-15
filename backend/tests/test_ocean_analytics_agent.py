@@ -75,3 +75,27 @@ def test_trend_direction_stable_within_small_delta():
 
 def test_trend_direction_empty_list_is_unknown():
     assert oaa._trend_direction([]) == "unknown"
+
+
+def test_productivity_trend_declining_when_sst_moves_out_of_favorable_range():
+    trend = [{"date": "d1", "sst_celsius": 28.0}, {"date": "d2", "sst_celsius": 25.0}]
+    direction, note = oaa._productivity_trend(trend)
+    assert direction == "declining"
+    assert "28.0" in note and "25.0" in note
+
+
+def test_productivity_trend_improving_when_sst_moves_into_favorable_range():
+    trend = [{"date": "d1", "sst_celsius": 25.0}, {"date": "d2", "sst_celsius": 28.0}]
+    direction, note = oaa._productivity_trend(trend)
+    assert direction == "improving"
+
+
+def test_productivity_trend_stable_when_favorability_unchanged():
+    trend = [{"date": "d1", "sst_celsius": 28.0}, {"date": "d2", "sst_celsius": 28.5}]
+    direction, note = oaa._productivity_trend(trend)
+    assert direction == "stable"
+
+
+def test_productivity_trend_unknown_for_empty_trend():
+    direction, note = oaa._productivity_trend([])
+    assert direction == "unknown"

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { parseSSEChunk, streamChat, fetchHistory, subscribeToAlerts } from "./chatClient";
+import { parseSSEChunk, streamChat, fetchHistory, subscribeToAlerts, signup, login } from "./chatClient";
 
 describe("parseSSEChunk", () => {
   it("parses a trace event", () => {
@@ -36,7 +36,7 @@ describe("streamChat", () => {
       })
     );
 
-    const gen = streamChat("session-1", "hello");
+    const gen = streamChat("session-1", "hello", "test-token");
     await expect(gen.next()).rejects.toThrow("/chat failed: 500");
   });
 });
@@ -56,7 +56,7 @@ describe("fetchHistory", () => {
       })
     );
 
-    const history = await fetchHistory("session-1");
+    const history = await fetchHistory("session-1", "test-token");
     expect(history).toEqual([{ role: "user", content: "hi" }]);
   });
 
@@ -66,7 +66,7 @@ describe("fetchHistory", () => {
       vi.fn().mockResolvedValue({ ok: false, status: 404 })
     );
 
-    await expect(fetchHistory("session-1")).rejects.toThrow(
+    await expect(fetchHistory("session-1", "test-token")).rejects.toThrow(
       "/sessions/session-1/history failed: 404"
     );
   });
@@ -89,12 +89,78 @@ describe("subscribeToAlerts", () => {
     vi.stubGlobal("EventSource", FakeEventSource);
 
     const onAlert = vi.fn();
-    const unsubscribe = subscribeToAlerts("session-1", onAlert);
+    const unsubscribe = subscribeToAlerts("session-1", "test-token", onAlert);
 
     listeners["alert"]({ data: JSON.stringify({ type: "alert", verdict: "unsafe", reasons: ["x"], lat: 1, lon: 2 }) });
     expect(onAlert).toHaveBeenCalledWith({ type: "alert", verdict: "unsafe", reasons: ["x"], lat: 1, lon: 2 });
 
     unsubscribe();
     expect(close).toHaveBeenCalledOnce();
+  });
+});
+
+describe("signup", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns the auth response on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: "t1", user_id: 1, email: "a@example.com" }),
+      })
+    );
+
+    const result = await signup("a@example.com", "password123");
+    expect(result).toEqual({ token: "t1", user_id: 1, email: "a@example.com" });
+  });
+
+  it("throws the server's error detail on failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ detail: "Email already registered" }),
+      })
+    );
+
+    await expect(signup("a@example.com", "password123")).rejects.toThrow(
+      "Email already registered"
+    );
+  });
+});
+
+describe("login", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns the auth response on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: "t1", user_id: 1, email: "a@example.com" }),
+      })
+    );
+
+    const result = await login("a@example.com", "password123");
+    expect(result).toEqual({ token: "t1", user_id: 1, email: "a@example.com" });
+  });
+
+  it("throws the server's error detail on failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({ detail: "Invalid email or password" }),
+      })
+    );
+
+    await expect(login("a@example.com", "wrong")).rejects.toThrow("Invalid email or password");
   });
 });

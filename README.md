@@ -16,6 +16,9 @@ Built for Smart India Hackathon problem statement **SIH26176**.
 - **Route safety** — "what's the safest route from `<place A>` to `<place B>`?" (waypoint hazard scan, not full navigation — see [Known limitations](#known-limitations))
 - **Multi-turn follow-ups** — "what about Thursday instead?" reuses context from earlier in the conversation
 - **Proactive alerts** — while a chat tab stays open, ORCA re-checks conditions every 5 minutes and pushes a warning if things turn unsafe, without being asked
+- **Productivity trend diagnostic** — "why has it been changing?" gets a real, data-cited answer built from the 7-day sea-surface-temperature trend (not fabricated catch statistics — see [Known limitations](#known-limitations))
+
+Signup/login is required (email + password). Voice input/output is available in the chat panel when the browser supports it (a mic button to speak your question, a toggle to have answers read aloud) — browser-based only, not real telephony (see [Known limitations](#known-limitations)).
 
 Every answer comes with a **reasoning trace panel** showing exactly which agents ran, what
 data they used, whether it was live or cached, and why the answer says what it says — this
@@ -62,7 +65,23 @@ flowchart TD
 
 ## Wireframe
 
+Not logged in:
+
 ```
++---------------------+
+| ORCA                |
+| [Log in] [Sign up]  |
+| [email____________] |
+| [password__________]|
+| [Log in / Sign up]  |
++---------------------+
+```
+
+Logged in:
+
+```
++----------------------------------------------------------------+
+| user@example.com                                     [Log out] |
 +----------------------------------------------------------------+
 | Hazard alert banner (shown only when active)         [Dismiss] |
 +------------------+------------------+----------------------------+
@@ -72,8 +91,8 @@ flowchart TD
 | [user] ...       | geospatial       | marker / route + waypoints |
 | [assistant] ...  | weather          |                            |
 |                  | risk             |                            |
-|                  | ocean_analytics  |                            |
-| [input] [Send]   |                  |                            |
+| [ ] Read aloud   | ocean_analytics  |                            |
+| [input] [Mic] [Send]                |                            |
 +------------------+------------------+----------------------------+
 ```
 
@@ -116,7 +135,8 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000` and sign up (email + password — no verification, this is a
+demo-scale account system).
 
 ### LLM setup
 
@@ -146,6 +166,7 @@ If neither key is set, `/chat` requests will fail once they reach the LLM step (
 |---|---|---|---|
 | `OMNIROUTE_API_KEY` | No | — | Priority LLM provider (local proxy only) |
 | `OLLAMA_API_KEY` | Recommended | — | Fallback / practical LLM provider |
+| `JWT_SECRET` | Recommended | insecure fixed dev value | Signs login tokens — set this to anything beyond a local demo |
 | `CORS_ORIGINS` | No | `["http://localhost:3000"]` | Backend CORS allowlist (JSON array string, e.g. `CORS_ORIGINS='["http://localhost:3000"]'`) |
 | `NEXT_PUBLIC_BACKEND_URL` | No | `http://localhost:8000` | Frontend → backend URL |
 
@@ -159,7 +180,7 @@ cd backend && pytest -v
 cd frontend && npm test && npx tsc --noEmit
 ```
 
-81 backend tests, 7 frontend tests, all passing as of the last commit on `main`.
+108 backend tests, 17 frontend tests, all passing as of the last commit on `main`.
 
 ## Known limitations
 
@@ -177,9 +198,17 @@ cd frontend && npm test && npx tsc --noEmit
   listens to the live feed for 5 seconds; a strike just outside that window is
   genuinely missed. An empty result means "none observed in this window," not "none
   exist."
-- **No real multi-user accounts.** Conversation history persists per `session_id`
-  (stored in the browser's `localStorage`), but there's no login/auth — anyone who
-  knows a session ID can read its history.
+- **Accounts are minimal by design.** Email + password only — no OAuth, no email
+  verification, no password reset. A signup token is a JWT signed with an insecure
+  fixed default unless you set `JWT_SECRET`.
+- **Voice is browser-based only, not real telephony.** The mic button and read-aloud
+  toggle use the browser's built-in Web Speech API — no SMS, no phone calls, no IVR.
+  They only appear when the browser supports them, and stop working the moment the
+  tab closes.
+- **The productivity diagnostic covers only the SST half of the story.** There's no
+  chlorophyll trend data (only a point-in-time value), so a chlorophyll-driven change
+  in conditions won't show up in the "why" answer. It also isn't real fish-catch data —
+  no free fisheries dataset exists — it's a proxy built from real ocean-condition trends.
 - **Chlorophyll data is stale.** NOAA's `erdMH1chla1day` dataset has been frozen
   upstream since 2022-07-25; the SST half of the same query is genuinely live.
 
@@ -192,15 +221,16 @@ backend/
     connectors/     # one module per external data source, all same {data, source, fetched_at, is_cached} contract
     graph.py        # the fixed LangGraph pipeline
     llm.py          # Omniroute → Ollama Cloud fallback client
-    db.py           # SQLite persistent history
+    auth.py         # password hashing + JWT tokens
+    db.py           # SQLite: persistent history + user accounts
     alerting.py     # proactive hazard polling + SSE delivery
-    main.py         # FastAPI app, /chat, /sessions/*, /health
+    main.py         # FastAPI app, /auth/*, /chat, /sessions/*, /health
   data/snapshots/    # committed fallback data for every connector
   tests/
 frontend/
-  app/page.tsx       # main chat/trace/map page
-  components/        # ChatPanel, ReasoningTrace, MapView, SstTrendChart
-  lib/                # chatClient.ts (SSE), types.ts
+  app/page.tsx       # auth gate + main chat/trace/map page
+  components/        # AuthGate, ChatPanel, ReasoningTrace, MapView, SstTrendChart
+  lib/                # chatClient.ts (SSE + auth calls), voice.ts (Web Speech API), types.ts
 docs/superpowers/
   specs/              # design spec (what to build and why)
   plans/              # task-by-task implementation plan

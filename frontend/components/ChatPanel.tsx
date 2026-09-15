@@ -1,7 +1,8 @@
 // frontend/components/ChatPanel.tsx
 "use client";
-import { useState, FormEvent } from "react";
+import { useEffect, useRef, useState, FormEvent } from "react";
 import { ChatMessage } from "@/lib/types";
+import { isSpeechRecognitionSupported, isSpeechSynthesisSupported, speak, startListening } from "@/lib/voice";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -11,12 +12,39 @@ interface ChatPanelProps {
 
 export function ChatPanel({ messages, onSend, isStreaming }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [speakAnswers, setSpeakAnswers] = useState(false);
+  const lastSpokenCount = useRef(0);
+
+  useEffect(() => {
+    if (!speakAnswers) {
+      lastSpokenCount.current = messages.length;
+      return;
+    }
+    const last = messages[messages.length - 1];
+    if (messages.length > lastSpokenCount.current && last?.role === "assistant") {
+      speak(last.content);
+    }
+    lastSpokenCount.current = messages.length;
+  }, [messages, speakAnswers]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
     onSend(input.trim());
     setInput("");
+  }
+
+  function handleMicClick() {
+    if (isListening) return;
+    setIsListening(true);
+    startListening(
+      (text) => {
+        setInput(text);
+        setIsListening(false);
+      },
+      () => setIsListening(false)
+    );
   }
 
   return (
@@ -29,6 +57,16 @@ export function ChatPanel({ messages, onSend, isStreaming }: ChatPanelProps) {
         ))}
         {isStreaming && <div className="text-left text-sm text-slate-400">thinking...</div>}
       </div>
+      {isSpeechSynthesisSupported() && (
+        <label className="flex items-center gap-2 px-4 text-sm text-slate-500">
+          <input
+            type="checkbox"
+            checked={speakAnswers}
+            onChange={(e) => setSpeakAnswers(e.target.checked)}
+          />
+          Read answers aloud
+        </label>
+      )}
       <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-t">
         <input
           className="flex-1 border rounded px-3 py-2"
@@ -37,6 +75,17 @@ export function ChatPanel({ messages, onSend, isStreaming }: ChatPanelProps) {
           placeholder="Ask about weather, fishing zones, or safety..."
           disabled={isStreaming}
         />
+        {isSpeechRecognitionSupported() && (
+          <button
+            type="button"
+            onClick={handleMicClick}
+            disabled={isStreaming || isListening}
+            className="px-3 py-2 border rounded disabled:opacity-50"
+            aria-label="Speak your question"
+          >
+            {isListening ? "Listening..." : "Mic"}
+          </button>
+        )}
         <button
           type="submit"
           className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"

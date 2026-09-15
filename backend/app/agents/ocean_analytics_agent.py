@@ -22,6 +22,30 @@ def _trend_direction(trend: list[dict]) -> str:
     return "warming" if delta > 0 else "cooling"
 
 
+def _productivity_trend(trend: list[dict]) -> tuple[str, str]:
+    """Deterministic 'why has it changed' signal for the reporting agent,
+    built from real SST trend data (not fabricated fish-catch statistics --
+    no free fish-productivity dataset exists). Compares whether SST was
+    inside the favorable PFZ band at the start vs. the end of the trend
+    window; chlorophyll trend data isn't available so this covers only the
+    SST half of the PFZ score."""
+    if not trend:
+        return "unknown", "No SST trend data available to assess a change."
+    start_c, end_c = trend[0]["sst_celsius"], trend[-1]["sst_celsius"]
+    start_ok = SST_MIN_C <= start_c <= SST_MAX_C
+    end_ok = SST_MIN_C <= end_c <= SST_MAX_C
+    note = (
+        f"SST moved from {start_c}°C ({'within' if start_ok else 'outside'} the "
+        f"{SST_MIN_C}-{SST_MAX_C}°C favorable band) to {end_c}°C "
+        f"({'within' if end_ok else 'outside'} it) over the observed period."
+    )
+    if end_ok and not start_ok:
+        return "improving", note
+    if start_ok and not end_ok:
+        return "declining", note
+    return "stable", note
+
+
 def _score(sst_c: float, chlorophyll: float) -> tuple[str, list[str]]:
     sst_ok = SST_MIN_C <= sst_c <= SST_MAX_C
     chl_ok = chlorophyll >= CHLOROPHYLL_MIN_MG_M3
@@ -46,6 +70,7 @@ async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, Trace
     chlorophyll = chl_result.data["chlorophyll_mg_m3"]
     trend = trend_result.data["sst_trend"]
     likelihood, reasons = _score(sst_c, chlorophyll)
+    productivity_trend, productivity_note = _productivity_trend(trend)
     output = {
         "sst_celsius": sst_c,
         "chlorophyll_mg_m3": chlorophyll,
@@ -53,6 +78,8 @@ async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, Trace
         "reasons": reasons,
         "sst_trend_celsius": trend,
         "sst_trend_direction": _trend_direction(trend),
+        "productivity_trend": productivity_trend,
+        "productivity_note": productivity_note,
     }
     trace = TraceEntry(
         agent="ocean_analytics",

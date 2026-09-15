@@ -9,6 +9,12 @@ Write a single clear, conversational answer:
 - If the geospatial result contains a "geofence_warning", state it clearly and prominently
   in your answer, even if the user's question was not primarily about boundaries or
   protected areas.
+- If the user asks why fishing conditions/productivity have changed, or the ocean_analytics
+  result contains a "productivity_trend" that is "improving" or "declining", use its
+  "productivity_note" to explain what changed and why -- this is real observed sea-surface-
+  temperature data, not fish-catch statistics (no free catch dataset exists), so frame it as
+  a change in ocean conditions relevant to fish aggregation, not a direct productivity/catch
+  claim.
 - Never invent numbers that are not present in the provided agent results."""
 
 
