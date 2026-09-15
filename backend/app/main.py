@@ -2,10 +2,11 @@ import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from app import db
 from app.config import get_settings
 from app.llm import get_llm_client
 from app.graph import build_graph
-from app.schemas import ChatRequest
+from app.schemas import ChatMessage, ChatRequest
 
 app = FastAPI(title="ORCA Marine Intelligence Platform")
 
@@ -17,17 +18,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+db.init_db()
+
 
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/sessions/{session_id}/history")
+async def session_history(session_id: str) -> list[ChatMessage]:
+    return [ChatMessage(**m) for m in db.get_history(session_id)]
+
+
 @app.post("/chat")
 async def chat(request: ChatRequest):
     client = get_llm_client()
     graph = build_graph(client)
-    history = [{"role": m.role, "content": m.content} for m in request.history]
+    history = db.get_history(request.session_id)
+    db.append_message(request.session_id, "user", request.message)
 
     async def event_stream():
         last_trace_len = 0
@@ -39,6 +48,7 @@ async def chat(request: ChatRequest):
                 yield f"event: trace\ndata: {entry.model_dump_json()}\n\n"
             last_trace_len = len(trace)
             if state.get("final_answer"):
+                db.append_message(request.session_id, "assistant", state["final_answer"])
                 payload = json.dumps({"answer": state["final_answer"]})
                 yield f"event: answer\ndata: {payload}\n\n"
 

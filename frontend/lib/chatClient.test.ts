@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { parseSSEChunk, streamChat } from "./chatClient";
+import { parseSSEChunk, streamChat, fetchHistory } from "./chatClient";
 
 describe("parseSSEChunk", () => {
   it("parses a trace event", () => {
@@ -36,7 +36,38 @@ describe("streamChat", () => {
       })
     );
 
-    const gen = streamChat("session-1", "hello", []);
+    const gen = streamChat("session-1", "hello");
     await expect(gen.next()).rejects.toThrow("/chat failed: 500");
+  });
+});
+
+describe("fetchHistory", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns parsed history on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => [{ role: "user", content: "hi" }],
+      })
+    );
+
+    const history = await fetchHistory("session-1");
+    expect(history).toEqual([{ role: "user", content: "hi" }]);
+  });
+
+  it("throws when the response is not ok", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 404 })
+    );
+
+    await expect(fetchHistory("session-1")).rejects.toThrow(
+      "/sessions/session-1/history failed: 404"
+    );
   });
 });

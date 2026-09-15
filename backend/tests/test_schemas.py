@@ -19,10 +19,15 @@ def test_trace_entry_defaults():
     assert entry.fetched_at is None
 
 
-def test_chat_request_parses_history():
-    req = ChatRequest(
-        session_id="abc",
-        message="is it safe tomorrow?",
-        history=[ChatMessage(role="user", content="hi")],
-    )
-    assert req.history[0].role == "user"
+def test_chat_request_has_no_client_supplied_history():
+    # History is server-loaded from the persistent store (app.db) by session_id,
+    # not trusted from the client -- ChatRequest deliberately has no history field.
+    req = ChatRequest(session_id="abc", message="is it safe tomorrow?")
+    assert req.session_id == "abc"
+    assert not hasattr(req, "history")
+
+
+def test_chat_message_roundtrip():
+    msg = ChatMessage(role="user", content="hi")
+    assert msg.role == "user"
+    assert msg.content == "hi"

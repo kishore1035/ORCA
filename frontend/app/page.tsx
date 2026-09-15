@@ -1,28 +1,53 @@
 // frontend/app/page.tsx
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ReasoningTrace } from "@/components/ReasoningTrace";
-import { streamChat } from "@/lib/chatClient";
+import { streamChat, fetchHistory } from "@/lib/chatClient";
 import { ChatMessage, TraceEntry } from "@/lib/types";
 
 const MapView = dynamic(() => import("@/components/MapView").then((m) => m.MapView), { ssr: false });
+
+const SESSION_STORAGE_KEY = "orca-session-id";
+
+function getOrCreateSessionId(): string {
+  try {
+    const existing = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (existing) return existing;
+  } catch {
+    // localStorage unavailable (private browsing, etc.) -- fall through to a fresh id
+  }
+  const id = crypto.randomUUID();
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, id);
+  } catch {
+    // best-effort persistence only
+  }
+  return id;
+}
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [trace, setTrace] = useState<TraceEntry[]>([]);
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [sessionId] = useState(getOrCreateSessionId);
+
+  useEffect(() => {
+    fetchHistory(sessionId)
+      .then(setMessages)
+      .catch(() => {
+        // No persisted history yet, or the backend is unreachable -- start fresh.
+      });
+  }, [sessionId]);
 
   async function handleSend(message: string) {
-    const priorMessages = messages;
     setMessages((prev) => [...prev, { role: "user", content: message }]);
     setTrace([]);
     setIsStreaming(true);
     try {
-      for await (const event of streamChat(sessionId, message, priorMessages)) {
+      for await (const event of streamChat(sessionId, message)) {
         if (event.type === "trace") {
           setTrace((prev) => [...prev, event.data]);
           if (event.data.agent === "geospatial") {

@@ -27,7 +27,6 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    history: list[ChatMessage] = []
 
 
 class ChatResponse(BaseModel):

@@ -18,15 +18,20 @@ export function parseSSEChunk(chunk: string): ChatStreamEvent[] {
   return events;
 }
 
+export async function fetchHistory(sessionId: string): Promise<ChatMessage[]> {
+  const response = await fetch(`${BACKEND_URL}/sessions/${sessionId}/history`);
+  if (!response.ok) throw new Error(`/sessions/${sessionId}/history failed: ${response.status}`);
+  return response.json();
+}
+
 export async function* streamChat(
   sessionId: string,
-  message: string,
-  history: ChatMessage[]
+  message: string
 ): AsyncGenerator<ChatStreamEvent> {
   const response = await fetch(`${BACKEND_URL}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, message, history }),
+    body: JSON.stringify({ session_id: sessionId, message }),
   });
   if (!response.ok) throw new Error(`/chat failed: ${response.status}`);
   if (!response.body) throw new Error("No response body from /chat");

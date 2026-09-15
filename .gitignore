@@ -9,6 +9,9 @@ venv/
 *.egg-info/
 .pytest_cache/
 
+# Persistent chat history (local SQLite db, not committed)
+backend/data/orca.db
+
 # Node / Next.js
 node_modules/
 .next/
