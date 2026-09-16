@@ -324,7 +324,7 @@ export function ChatPanel({
       </div>
 
       {/* ── ANIMATED SPRING PROMPT INPUT (Cubic-Bezier Physics & Fluid Morphing) ── */}
-      <div className="p-3 sm:p-4 bg-white shrink-0 flex items-center justify-center">
+      <div className="p-3 sm:p-4 bg-transparent shrink-0 flex items-center justify-center">
         <PromptInput
           value={input}
           onChange={setInput}
