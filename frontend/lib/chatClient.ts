@@ -53,21 +53,23 @@ export async function fetchVapidPublicKey(): Promise<string> {
 
 export async function subscribePush(
   sessionId: string,
-  token: string,
+  token: string | null | undefined,
   subscription: PushSubscriptionJSON
 ): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const response = await fetch(`${BACKEND_URL}/push/subscribe`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers,
     body: JSON.stringify({ session_id: sessionId, subscription }),
   });
   if (!response.ok) throw new Error(`/push/subscribe failed: ${response.status}`);
 }
 
-export async function fetchHistory(sessionId: string, token: string): Promise<ChatMessage[]> {
-  const response = await fetch(`${BACKEND_URL}/sessions/${sessionId}/history`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export async function fetchHistory(sessionId: string, token?: string | null): Promise<ChatMessage[]> {
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const response = await fetch(`${BACKEND_URL}/sessions/${sessionId}/history`, { headers });
   if (!response.ok) throw new Error(`/sessions/${sessionId}/history failed: ${response.status}`);
   return response.json();
 }
@@ -81,10 +83,11 @@ export async function fetchHistory(sessionId: string, token: string): Promise<Ch
  */
 export function subscribeToAlerts(
   sessionId: string,
-  token: string,
+  token: string | null | undefined,
   onAlert: (alert: ProactiveAlert) => void
 ): () => void {
-  const url = `${BACKEND_URL}/sessions/${sessionId}/alerts/stream?token=${encodeURIComponent(token)}`;
+  const query = token ? `?token=${encodeURIComponent(token)}` : "";
+  const url = `${BACKEND_URL}/sessions/${sessionId}/alerts/stream${query}`;
   const source = new EventSource(url);
   source.addEventListener("alert", (event) => {
     onAlert(JSON.parse((event as MessageEvent).data));

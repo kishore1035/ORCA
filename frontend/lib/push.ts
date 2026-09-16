@@ -54,7 +54,7 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
  * via PushManager, and sends the subscription to the backend. Throws if the
  * browser doesn't support push or the user denies permission.
  */
-export async function subscribeToPush(sessionId: string, token: string): Promise<void> {
+export async function subscribeToPush(sessionId: string, token: string | null | undefined): Promise<void> {
   if (!isPushSupported()) throw new Error("Push notifications are not supported in this browser");
 
   const g = getGlobal();

@@ -72,7 +72,7 @@ async def test_chat_endpoint_persists_user_message_and_answer(monkeypatch, tmp_p
     ]
 
 
-async def test_chat_endpoint_rejects_missing_token(monkeypatch, tmp_path):
+async def test_chat_endpoint_allows_missing_token_as_guest(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     db.init_db()
     monkeypatch.setattr(main_module, "build_graph", lambda client: FakeGraph())
@@ -81,6 +81,24 @@ async def test_chat_endpoint_rejects_missing_token(monkeypatch, tmp_path):
     transport = ASGITransport(app=main_module.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post("/chat", json={"session_id": "s1", "message": "hi"})
+
+    assert response.status_code == 200
+    assert db.get_session_owner("s1") is None
+
+
+async def test_chat_endpoint_rejects_invalid_token(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+    monkeypatch.setattr(main_module, "build_graph", lambda client: FakeGraph())
+    monkeypatch.setattr(main_module, "get_llm_client", lambda: object())
+
+    transport = ASGITransport(app=main_module.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/chat",
+            json={"session_id": "s1", "message": "hi"},
+            headers={"Authorization": "Bearer not-a-real-token"},
+        )
 
     assert response.status_code == 401
 
@@ -132,7 +150,7 @@ async def test_session_history_endpoint_returns_empty_for_new_session(monkeypatc
     assert response.json() == []
 
 
-async def test_session_history_endpoint_rejects_missing_token(monkeypatch, tmp_path):
+async def test_session_history_endpoint_allows_missing_token_for_unowned_session(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     db.init_db()
 
@@ -140,7 +158,19 @@ async def test_session_history_endpoint_rejects_missing_token(monkeypatch, tmp_p
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/sessions/s3/history")
 
-    assert response.status_code == 401
+    assert response.status_code == 200
+
+
+async def test_session_history_endpoint_rejects_missing_token_for_owned_session(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+    db.ensure_session("s3", user_id=999)
+
+    transport = ASGITransport(app=main_module.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/sessions/s3/history")
+
+    assert response.status_code == 403
 
 
 async def test_session_history_endpoint_rejects_other_users_session(monkeypatch, tmp_path):

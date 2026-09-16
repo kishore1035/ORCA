@@ -40,7 +40,7 @@ async def test_push_subscribe_stores_subscription(monkeypatch, tmp_path):
     assert subs[0]["endpoint"] == "https://push.example.com/x"
 
 
-async def test_push_subscribe_rejects_missing_token(monkeypatch, tmp_path):
+async def test_push_subscribe_allows_missing_token_as_guest(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
     db.init_db()
 
@@ -51,7 +51,8 @@ async def test_push_subscribe_rejects_missing_token(monkeypatch, tmp_path):
             json={"session_id": "s1", "subscription": {"endpoint": "https://push.example.com/x"}},
         )
 
-    assert response.status_code == 401
+    assert response.status_code == 200
+    assert db.get_session_owner("s1") is None
 
 
 async def test_push_subscribe_rejects_other_users_session(monkeypatch, tmp_path):

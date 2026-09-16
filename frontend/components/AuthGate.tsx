@@ -6,9 +6,10 @@ import { AuthResponse } from "@/lib/types";
 
 interface AuthGateProps {
   onAuthenticated: (auth: AuthResponse) => void;
+  onSkip?: () => void;
 }
 
-export function AuthGate({ onAuthenticated }: AuthGateProps) {
+export function AuthGate({ onAuthenticated, onSkip }: AuthGateProps) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,6 +75,15 @@ export function AuthGate({ onAuthenticated }: AuthGateProps) {
         >
           {mode === "login" ? "Log in" : "Sign up"}
         </button>
+        {onSkip && (
+          <button
+            type="button"
+            onClick={onSkip}
+            className="w-full text-sm text-slate-500 hover:text-black hover:underline"
+          >
+            Continue without an account
+          </button>
+        )}
       </form>
     </div>
   );

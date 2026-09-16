@@ -31,8 +31,8 @@ function storeAuth(auth: AuthResponse | null) {
   }
 }
 
-function getOrCreateSessionId(email: string): string {
-  const key = `orca-session-id:${email}`;
+function getOrCreateSessionId(email: string | null): string {
+  const key = `orca-session-id:${email ?? "guest"}`;
   try {
     const existing = localStorage.getItem(key);
     if (existing) return existing;
@@ -51,6 +51,7 @@ function getOrCreateSessionId(email: string): string {
 export default function Home() {
   const [auth, setAuth] = useState<AuthResponse | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [showAuthGate, setShowAuthGate] = useState(false);
 
   useEffect(() => {
     setAuth(loadStoredAuth());
@@ -58,19 +59,27 @@ export default function Home() {
   }, []);
 
   if (!authChecked) return null;
-  if (!auth) {
+
+  // Accounts are optional, not required -- the app works fully as a guest.
+  // Logging in only unlocks a persistent identity (e.g. push notifications
+  // that follow you, not just this browser's local session).
+  if (showAuthGate) {
     return (
       <AuthGate
         onAuthenticated={(a) => {
           storeAuth(a);
           setAuth(a);
+          setShowAuthGate(false);
         }}
+        onSkip={() => setShowAuthGate(false)}
       />
     );
   }
+
   return (
     <ChatApp
       auth={auth}
+      onLogin={() => setShowAuthGate(true)}
       onLogout={() => {
         storeAuth(null);
         setAuth(null);
@@ -79,20 +88,28 @@ export default function Home() {
   );
 }
 
-function ChatApp({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void }) {
+function ChatApp({
+  auth,
+  onLogin,
+  onLogout,
+}: {
+  auth: AuthResponse | null;
+  onLogin: () => void;
+  onLogout: () => void;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [trace, setTrace] = useState<TraceEntry[]>([]);
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [route, setRoute] = useState<RouteWaypoint[] | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionId] = useState(() => getOrCreateSessionId(auth.email));
+  const [sessionId] = useState(() => getOrCreateSessionId(auth?.email ?? null));
   const [activeAlert, setActiveAlert] = useState<ProactiveAlert | null>(null);
   const [pushStatus, setPushStatus] = useState<"idle" | "subscribing" | "subscribed" | "error">("idle");
 
   async function handleEnablePush() {
     setPushStatus("subscribing");
     try {
-      await subscribeToPush(sessionId, auth.token);
+      await subscribeToPush(sessionId, auth?.token);
       setPushStatus("subscribed");
     } catch {
       setPushStatus("error");
@@ -100,16 +117,16 @@ function ChatApp({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void 
   }
 
   useEffect(() => {
-    fetchHistory(sessionId, auth.token)
+    fetchHistory(sessionId, auth?.token)
       .then(setMessages)
       .catch(() => {
         // No persisted history yet, or the backend is unreachable -- start fresh.
       });
-  }, [sessionId, auth.token]);
+  }, [sessionId, auth?.token]);
 
   useEffect(() => {
-    return subscribeToAlerts(sessionId, auth.token, setActiveAlert);
-  }, [sessionId, auth.token]);
+    return subscribeToAlerts(sessionId, auth?.token, setActiveAlert);
+  }, [sessionId, auth?.token]);
 
   async function handleSend(message: string) {
     setMessages((prev) => [...prev, { role: "user", content: message }]);
@@ -117,7 +134,7 @@ function ChatApp({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void 
     setRoute(null);
     setIsStreaming(true);
     try {
-      for await (const event of streamChat(sessionId, message, auth.token, location)) {
+      for await (const event of streamChat(sessionId, message, auth?.token, location)) {
         if (event.type === "trace") {
           setTrace((prev) => [...prev, event.data]);
           if (event.data.agent === "geospatial") {
@@ -179,7 +196,7 @@ function ChatApp({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void 
     <main className="flex flex-col h-screen bg-slate-50">
       {/* Top User Account Bar */}
       <div className="flex items-center justify-between px-5 py-1.5 bg-slate-100 border-b border-slate-200 text-xs text-slate-600">
-        <span className="font-mono">{auth.email}</span>
+        <span className="font-mono">{auth?.email ?? "Guest"}</span>
         <div className="flex items-center gap-4">
           {isPushSupported() && pushStatus !== "subscribed" && (
             <button
@@ -197,9 +214,15 @@ function ChatApp({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void 
           {pushStatus === "subscribed" && (
             <span className="text-slate-500">✓ Push notifications enabled</span>
           )}
-          <button onClick={onLogout} className="hover:text-black font-semibold">
-            Log out
-          </button>
+          {auth ? (
+            <button onClick={onLogout} className="hover:text-black font-semibold">
+              Log out
+            </button>
+          ) : (
+            <button onClick={onLogin} className="hover:text-black font-semibold">
+              Log in
+            </button>
+          )}
         </div>
       </div>
 

@@ -45,20 +45,26 @@ app.add_middleware(
 )
 
 
-def _require_user_from_token(token: str | None) -> dict:
+# Auth is optional, not required: a request with no token is treated as this
+# anonymous guest identity rather than rejected. A token that *is* present
+# must still be valid -- only its absence is tolerated.
+GUEST_USER: dict = {"user_id": None, "email": None}
+
+
+def _current_user_from_token(token: str | None) -> dict:
     if not token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
+        return GUEST_USER
     payload = auth.decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired auth token")
     return payload
 
 
-def _require_user(authorization: str | None = Header(None)) -> dict:
+def _current_user(authorization: str | None = Header(None)) -> dict:
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.removeprefix("Bearer ").strip()
-    return _require_user_from_token(token)
+    return _current_user_from_token(token)
 
 
 @app.get("/health")
@@ -98,7 +104,7 @@ async def vapid_public_key() -> dict:
 
 
 @app.post("/push/subscribe")
-async def push_subscribe(request: PushSubscribeRequest, user: dict = Depends(_require_user)) -> dict:
+async def push_subscribe(request: PushSubscribeRequest, user: dict = Depends(_current_user)) -> dict:
     try:
         db.ensure_session(request.session_id, user["user_id"])
     except db.SessionOwnershipError:
@@ -108,7 +114,7 @@ async def push_subscribe(request: PushSubscribeRequest, user: dict = Depends(_re
 
 
 @app.get("/sessions/{session_id}/history")
-async def session_history(session_id: str, user: dict = Depends(_require_user)) -> list[ChatMessage]:
+async def session_history(session_id: str, user: dict = Depends(_current_user)) -> list[ChatMessage]:
     owner = db.get_session_owner(session_id)
     if owner is not None and owner != user["user_id"]:
         raise HTTPException(status_code=403, detail="Session belongs to another user")
@@ -116,8 +122,8 @@ async def session_history(session_id: str, user: dict = Depends(_require_user)) 
 
 
 @app.get("/sessions/{session_id}/alerts/stream")
-async def alerts_stream(session_id: str, token: str = Query(...)):
-    user = _require_user_from_token(token)
+async def alerts_stream(session_id: str, token: str | None = Query(None)):
+    user = _current_user_from_token(token)
     owner = db.get_session_owner(session_id)
     if owner is not None and owner != user["user_id"]:
         raise HTTPException(status_code=403, detail="Session belongs to another user")
@@ -139,7 +145,7 @@ async def alerts_stream(session_id: str, token: str = Query(...)):
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest, user: dict = Depends(_require_user)):
+async def chat(request: ChatRequest, user: dict = Depends(_current_user)):
     try:
         db.ensure_session(request.session_id, user["user_id"])
     except db.SessionOwnershipError:
