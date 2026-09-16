@@ -109,3 +109,36 @@ def test_productivity_trend_stable_when_favorability_unchanged():
 def test_productivity_trend_unknown_for_empty_trend():
     direction, note = oaa._productivity_trend([])
     assert direction == "unknown"
+
+
+def test_trend_direction_unknown_when_all_points_are_masked_null():
+    # A real ERDDAP condition, not a fabrication: a near-shore point the 1km
+    # MUR SST grid treats as land returns a JSON null for every day.
+    trend = [{"date": "d1", "sst_celsius": None}, {"date": "d2", "sst_celsius": None}]
+    assert oaa._trend_direction(trend) == "unknown"
+
+
+def test_trend_direction_ignores_masked_points_when_enough_real_points_remain():
+    trend = [
+        {"date": "d1", "sst_celsius": None},
+        {"date": "d2", "sst_celsius": 26.0},
+        {"date": "d3", "sst_celsius": 28.0},
+    ]
+    assert oaa._trend_direction(trend) == "warming"
+
+
+def test_productivity_trend_unknown_when_all_points_are_masked_null():
+    trend = [{"date": "d1", "sst_celsius": None}, {"date": "d2", "sst_celsius": None}]
+    direction, note = oaa._productivity_trend(trend)
+    assert direction == "unknown"
+    assert "No SST trend data" in note
+
+
+def test_productivity_trend_ignores_masked_points_when_enough_real_points_remain():
+    trend = [
+        {"date": "d1", "sst_celsius": None},
+        {"date": "d2", "sst_celsius": 25.0},
+        {"date": "d3", "sst_celsius": 28.0},
+    ]
+    direction, note = oaa._productivity_trend(trend)
+    assert direction == "improving"

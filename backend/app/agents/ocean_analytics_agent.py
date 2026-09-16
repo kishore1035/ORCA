@@ -36,10 +36,19 @@ CHLOROPHYLL_MIN_MG_M3 = 0.2
 TREND_STABLE_THRESHOLD_C = 0.3
 
 
+def _valid_trend_points(trend: list[dict]) -> list[dict]:
+    """ERDDAP returns a JSON null sst_celsius for a masked grid cell -- a
+    real, honest "no data" for that day (e.g. a near-shore point the 1km MUR
+    grid treats as land), not a connector fabrication. Filter those out
+    rather than let them reach arithmetic that assumes a real number."""
+    return [point for point in trend if point.get("sst_celsius") is not None]
+
+
 def _trend_direction(trend: list[dict]) -> str:
-    if not trend:
+    points = _valid_trend_points(trend)
+    if len(points) < 2:
         return "unknown"
-    delta = trend[-1]["sst_celsius"] - trend[0]["sst_celsius"]
+    delta = points[-1]["sst_celsius"] - points[0]["sst_celsius"]
     if abs(delta) < TREND_STABLE_THRESHOLD_C:
         return "stable"
     return "warming" if delta > 0 else "cooling"
@@ -52,9 +61,10 @@ def _productivity_trend(trend: list[dict]) -> tuple[str, str]:
     inside the favorable PFZ band at the start vs. the end of the trend
     window; chlorophyll trend data isn't available so this covers only the
     SST half of the PFZ score."""
-    if not trend:
+    points = _valid_trend_points(trend)
+    if len(points) < 2:
         return "unknown", "No SST trend data available to assess a change."
-    start_c, end_c = trend[0]["sst_celsius"], trend[-1]["sst_celsius"]
+    start_c, end_c = points[0]["sst_celsius"], points[-1]["sst_celsius"]
     start_ok = SST_MIN_C <= start_c <= SST_MAX_C
     end_ok = SST_MIN_C <= end_c <= SST_MAX_C
     note = (

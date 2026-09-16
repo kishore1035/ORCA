@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 
 interface TrendPoint {
   date: string;
-  sst_celsius: number;
+  sst_celsius: number | null;
 }
 
 interface SstTrendChartProps {
@@ -14,9 +14,16 @@ const WIDTH = 240;
 const HEIGHT = 64;
 const PADDING = 8;
 
-export function SstTrendChart({ trend }: SstTrendChartProps) {
+export function SstTrendChart({ trend: rawTrend }: SstTrendChartProps) {
   const gradientId = useId();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  // A masked ERDDAP grid cell (e.g. a near-shore point the 1km MUR grid
+  // treats as land) legitimately has no SST for that day -- filter those
+  // out rather than let a null reach arithmetic that expects a number.
+  const trend = rawTrend.filter(
+    (p): p is TrendPoint & { sst_celsius: number } => typeof p.sst_celsius === "number"
+  );
 
   if (trend.length < 2) {
     return null;
