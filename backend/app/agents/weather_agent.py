@@ -123,10 +123,17 @@ async def run_weather_agent(
     # real wave/swell/current/SST numbers should take final precedence over
     # INCOIS's always-cached fallback (see the INCOIS fabrication note above
     # for why that source can no longer claim live numeric values itself).
-    if stormglass_res and stormglass_res.data:
+    # `is_cached` guard is load-bearing: Stormglass's cached fallback is a
+    # generic "now" snapshot with no target_time awareness at all -- letting
+    # it override an INCOIS forecast that WAS fetched for the user's actual
+    # requested target_time silently replaced a real, relevant hazard value
+    # (e.g. a 2.3m wave forecast for a requested 6am departure) with a
+    # stale, irrelevant one, understating risk to the risk engine.
+    if stormglass_res and stormglass_res.data and not stormglass_res.is_cached:
         for field in ("wave_height_m", "swell_height_m", "wave_period_s", "surface_current_speed_ms"):
             if stormglass_res.data.get(field) is not None:
                 output[field] = stormglass_res.data[field]
+    if stormglass_res and stormglass_res.data:
         output["parameters"].extend(stormglass_res.data.get("parameters", []))
         if stormglass_res.source not in sources:
             sources.append(stormglass_res.source)
