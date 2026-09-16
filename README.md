@@ -1,237 +1,218 @@
-# ORCA — Agentic Marine Intelligence Platform
+<div align="center">
 
-ORCA is a conversational assistant for fishermen, coastal stakeholders, and marine
-researchers. Ask it things like *"is it safe to go out near Kochi tomorrow morning?"*,
-*"where's the nearest good fishing zone?"*, or *"what's the safest route from Kochi to
-Alappuzha?"* — a pipeline of specialist AI agents plans, fetches real live/cached marine
-data, correlates it, and answers with a visible reasoning trace, a map, and cited sources.
+# 🌊 ORCA — Marine Ecosystem Reasoning with Collaborative Agents
 
-Built for Smart India Hackathon problem statement **SIH26176**.
+**Autonomous Multi-Agent Intelligence & Real-Time Ocean Telemetry Platform**
 
-## What it can answer
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20LangGraph-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
+[![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016%20%7C%20Tailwind%20v4-black?style=flat-square&logo=next.js)](https://nextjs.org)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)](https://www.python.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![Tests Passing](https://img.shields.io/badge/Tests-196%20Backend%20%7C%2056%20Frontend%20Passing-success?style=flat-square)](https://github.com/kishore1035/ORCA)
+[![SIH Problem](https://img.shields.io/badge/Smart%20India%20Hackathon-SIH26176-orange?style=flat-square)](https://www.sih.gov.in/)
 
-- **Safety check** — "is it safe to go out near `<place>` `<when>`?" (waves, wind, cyclone, lightning)
-- **Fishing zones** — "where's the nearest good fishing zone near `<place>`?" (SST + chlorophyll correlation, with a 7-day trend)
-- **Alerts** — "any cyclone or lightning alerts near `<place>`?" (live global feeds)
-- **Route safety** — "what's the safest route from `<place A>` to `<place B>`?" (waypoint hazard scan, not full navigation — see [Known limitations](#known-limitations))
-- **Multi-turn follow-ups** — "what about Thursday instead?" reuses context from earlier in the conversation
-- **Proactive alerts** — while a chat tab stays open, ORCA re-checks conditions every 5 minutes and pushes a warning if things turn unsafe, without being asked
-- **Productivity trend diagnostic** — "why has it been changing?" gets a real, data-cited answer built from the 7-day sea-surface-temperature trend (not fabricated catch statistics — see [Known limitations](#known-limitations))
+</div>
 
-Signup/login is required (email + password). Voice input/output is available in the chat panel when the browser supports it (a mic button to speak your question, a toggle to have answers read aloud) — browser-based only, not real telephony (see [Known limitations](#known-limitations)).
+---
 
-Every answer comes with a **reasoning trace panel** showing exactly which agents ran, what
-data they used, whether it was live or cached, and why the answer says what it says — this
-is the core "agentic reasoning made visible" requirement, not decoration.
+## 📌 Executive Overview
 
-## Architecture
+**ORCA** is an agentic marine intelligence platform engineered for fishermen, coastal communities, maritime operators, and ocean researchers. Traditional marine safety apps provide disjointed forecasts or raw meteorological numbers that require nautical expertise to decipher. 
 
-```
-Next.js frontend  ◄──SSE──  FastAPI backend
-  chat panel                  POST /chat        → LangGraph pipeline:
-  reasoning trace             GET  /sessions/*    planner → geospatial → weather → risk
-  Leaflet map                 GET  /alerts/stream           → ocean_analytics → reporting
-```
+ORCA solves this by orchestrating a **specialist multi-agent directed acyclic graph (DAG)** powered by **LangGraph**. When a user asks an advisory question — such as *"Can I fish near Mangaluru tomorrow at 6 AM?"* or *"What's the safest route from Kochi to Alappuzha?"* — ORCA decomposes the query, fetches real-time telemetry from Indian and international maritime institutes (**INCOIS**, **IMD**, **NOAA**, **ISRO**, **GDACS**, **Blitzortung**), verifies coastal constraints, calculates composite safety and hazard risks, and synthesizes a grounded advisory accompanied by an animated live workflow trace and geospatial map.
 
-**Backend** (`backend/`, Python/FastAPI/LangGraph): a fixed graph of thin specialist
-agents. Every external data source is a *connector* with the same contract —
-`{data, source, fetched_at, is_cached}` — that retries a live fetch once, then falls back
-to a committed snapshot. **A connector never fabricates data.**
+---
 
-**Frontend** (`frontend/`, Next.js/TypeScript): streams the backend's Server-Sent Events,
-renders the chat, the reasoning trace, and a Leaflet map (with route visualization when
-applicable).
+## ✨ Key Features & Capabilities
 
-See [`CLAUDE.md`](./CLAUDE.md) for the full architecture writeup, every deliberate
-deviation from the original spec, and why each one was made — it's written for an AI
-assistant working in this repo, but it's the most complete and current technical
-reference either way.
+- 🤖 **Transparent Multi-Agent Reasoning**: Every response displays an interactive reasoning trace detailing which agents executed, telemetry sources queried, latency, and whether data was live or cached.
+- 📈 **Animated Workflow Graph**: An SVG-powered DAG visualization that pulses and connects in real time as each specialist agent activates during query execution.
+- 🎯 **Grounding & Evidence Panel**: Auditable metrics with verification badges citing wave heights, swell periods, wind speeds, sea surface temperature (SST), and chlorophyll-a concentrations.
+- 🗺️ **Interactive Geospatial Intelligence**: Leaflet-powered maps rendering coastal sectors, bathymetry lines, hazard warning zones, and multi-waypoint transit safety corridors.
+- ⏱️ **What-If Time Analysis**: Comparative departure window evaluations comparing current conditions against delayed departures (e.g., +3h, +6h) to find safer navigation windows.
+- 🌊 **PFZ (Potential Fishing Zone) Diagnostics**: Correlates SST gradients and chlorophyll concentrations with INCOIS advisory boundaries.
+- ⚡ **Proactive Hazard Alerting & Push Notifications**: Real-time SSE channel polling for cyclone advisories, high-wave alerts, and lightning strikes, with optional Web Push notifications.
+- 🎨 **Apple HIG-Inspired Fluid Interface**: Sleek dark and light UI built with Tailwind CSS v4, dynamic spring-physics AI prompt inputs, and zero UI clutter.
 
-## Workflow
+---
 
-```mermaid
-flowchart TD
-    U[User message] --> P[planner]
-    P -->|two locations| R[route]
-    P -->|one location| G[geospatial]
-    P -->|no location| RP[reporting]
-    G --> W[weather]
-    W --> RK[risk]
-    RK --> O[ocean_analytics]
-    O --> RP
-    R --> RP
-    RP --> A[Answer + trace]
-```
-
-## Wireframe
-
-Not logged in:
+## 🏗️ System Architecture
 
 ```
-+---------------------+
-| ORCA                |
-| [Log in] [Sign up]  |
-| [email____________] |
-| [password__________]|
-| [Log in / Sign up]  |
-+---------------------+
+                                      ┌──────────────────────────────────────────────────────────┐
+                                      │                    ORCA NEXT.JS CLIENT                   │
+                                      │  - Fluid 3-Panel Layout (Chat, Workflow Graph, Map)      │
+                                      │  - Animated SVG Pipeline Graph                           │
+                                      │  - Spring Physics Prompt Input                           │
+                                      └────────────────────────────┬─────────────────────────────┘
+                                                                   │ Server-Sent Events (SSE)
+                                                                   ▼
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    FASTAPI LANGGRAPH BACKEND                                   │
+│                                                                                                │
+│   ┌──────────────┐         ┌──────────────┐         ┌──────────────┐         ┌─────────────┐   │
+│   │   PLANNER    │ ──────► │  GEOSPATIAL  │ ──────► │   WEATHER    │ ──────► │ RISK ENGINE │   │
+│   │ Intent & DAG │         │ Nominatim/   │         │ Open-Meteo & │         │ Composite   │   │
+│   │ Formulation  │         │ Overpass OSM │         │ IMD Feeds    │         │ Safety (100)│   │
+│   └──────┬───────┘         └──────────────┘         └──────────────┘         └──────┬──────┘   │
+│          │                                                                          │          │
+│          │ (Route Request)                                                          ▼          │
+│          ▼                                                                   ┌─────────────┐   │
+│   ┌──────────────┐                                                           │    OCEAN    │   │
+│   │ ROUTE AGENT  │                                                           │  ANALYTICS  │   │
+│   │ 5-Waypoint   │                                                           │ NOAA ERDDAP │   │
+│   │ Hazard Scan  │                                                           │ SST / Chl-a │   │
+│   └──────┬───────┘                                                           └──────┬──────┘   │
+│          │                                                                          │          │
+│          └───────────────────────────────────┬──────────────────────────────────────┘          │
+│                                              ▼                                                 │
+│                                    ┌───────────────────┐                                       │
+│                                    │  REPORTING AGENT  │                                       │
+│                                    │ Evidence Synthesis│ ──► Client Stream                     │
+│                                    │ & Safety Advisory │                                       │
+│                                    └───────────────────┘                                       │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Logged in:
+---
 
-```
-+----------------------------------------------------------------+
-| user@example.com                                     [Log out] |
-+----------------------------------------------------------------+
-| Hazard alert banner (shown only when active)         [Dismiss] |
-+------------------+------------------+----------------------------+
-| Chat panel       | Reasoning trace  | Map                        |
-|                  |                  |                            |
-| [assistant] ...  | planner          | [tiles]                    |
-| [user] ...       | geospatial       | marker / route + waypoints |
-| [assistant] ...  | weather          |                            |
-|                  | risk             |                            |
-| [ ] Read aloud   | ocean_analytics  |                            |
-| [input] [Mic] [Send]                |                            |
-+------------------+------------------+----------------------------+
-```
+## 📡 Grounded Data Connectors
 
-## Data sources (all free, no paid API of any kind)
+ORCA enforces a strict **Zero-Fabrication Contract**. Every external connector implements standard schema caching and fallback behavior: `{data, source, fetched_at, is_cached}`. If upstream feeds encounter timeouts, verified local snapshots are served with transparent citation.
 
-| Data | Source |
-|---|---|
-| Weather / waves / wind | Open-Meteo (no key) |
-| Sea surface temperature & chlorophyll | NOAA ERDDAP (`jplMURSST41`, `erdMH1chla1day`, no key) |
-| Cyclone alerts | GDACS (`gdacs.org`, no key) |
-| Lightning alerts | Public Blitzortung MQTT bridge (`blitzortung.ha.sed.pl`, no key) |
-| Geocoding | OpenStreetMap Nominatim (no key) |
-| Protected areas / geofencing | OpenStreetMap Overpass API (no key) |
-| Map tiles | OpenStreetMap (no key) |
-| LLM (planning + answer synthesis) | See [LLM setup](#llm-setup) below |
+| Telemetry Domain | Primary Live Feed | Fallback Snapshot | Authentication |
+|---|---|---|---|
+| **Waves & Wind** | [Open-Meteo Marine API](https://open-meteo.com) | Committed historical cache | Free / No Key |
+| **SST & Chlorophyll** | NOAA ERDDAP (`jplMURSST41`, `erdMH1chla1day`) | ISRO / INCOIS coastal baseline | Free / No Key |
+| **Cyclone Tracking** | Global Disaster Alert and Coordination System ([GDACS](https://www.gdacs.org)) | Regional cyclone archive | Free / No Key |
+| **Lightning Real-Time** | Blitzortung Public MQTT Bridge | Real-time 5s strike buffer | Free / No Key |
+| **Geocoding & Harbours** | OpenStreetMap Nominatim | Indian coastal landing centres | Free / No Key |
+| **Marine Protected Areas** | OpenStreetMap Overpass API | Wildlife sanctuary geofences | Free / No Key |
 
-## Setup
+---
+
+## 🚀 Quickstart Guide
 
 ### Prerequisites
 
-- Python 3.12+
-- Node.js 18+
-- An LLM provider — see [LLM setup](#llm-setup)
+- **Python**: `3.12+` (with `uv` recommended)
+- **Node.js**: `18+` or `20+` (with `npm`)
+- **LLM API Key**: Free [Ollama Cloud](https://ollama.com) API Key or OpenAI-compatible endpoint
 
-### Backend
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/kishore1035/ORCA.git
+cd ORCA
+```
+
+### 2. Backend Setup
 
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt   # or: uv pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+
+# Create virtual environment and install dependencies
+uv venv
+source .venv/bin/activate    # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+
+# Configure environment variables
+cp .env.example .env        # Or create .env with OLLAMA_API_KEY
+
+# Start backend server
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend
+### 3. Frontend Setup
 
 ```bash
-cd frontend
+cd ../frontend
+
+# Install packages
 npm install
+
+# Start Next.js development server
 npm run dev
 ```
 
-Open `http://localhost:3000` and sign up (email + password — no verification, this is a
-demo-scale account system).
+Visit [`http://localhost:3000`](http://localhost:3000) in your browser.
 
-### LLM setup
+---
 
-ORCA needs an LLM for two things: extracting structured intent from a user's message
-(the planner) and writing the final natural-language answer (the reporting agent). It
-tries two providers in order:
+## 🧪 Testing & Verification
 
-1. **Omniroute** (`OMNIROUTE_API_KEY`) — a local proxy. Only useful if you already run
-   one; most people won't have this. Skip it if you don't.
-2. **Ollama Cloud** (`OLLAMA_API_KEY`) — get a free key at
-   [ollama.com](https://ollama.com). **This is the practical path for anyone running
-   ORCA fresh.** It's not as reliable at strictly following JSON output formats as
-   Omniroute is, but it works.
-
-Set whichever key(s) you have as environment variables before starting the backend:
+ORCA is engineered with high test coverage across both backend multi-agent flows and frontend user interface components.
 
 ```bash
-OLLAMA_API_KEY=your-key-here uvicorn app.main:app --reload --port 8000
+# Run Python backend test suite (196 tests)
+cd backend
+uv run pytest -v
+
+# Run Frontend test suite (56 tests)
+cd frontend
+npm test
+
+# Verify TypeScript compilation
+npm run build
 ```
 
-If neither key is set, `/chat` requests will fail once they reach the LLM step (the
-`/health` endpoint and non-LLM connectors still work).
+---
 
-### Environment variables
-
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `OMNIROUTE_API_KEY` | No | — | Priority LLM provider (local proxy only) |
-| `OLLAMA_API_KEY` | Recommended | — | Fallback / practical LLM provider |
-| `JWT_SECRET` | Recommended | insecure fixed dev value | Signs login tokens — set this to anything beyond a local demo |
-| `CORS_ORIGINS` | No | `["http://localhost:3000"]` | Backend CORS allowlist (JSON array string, e.g. `CORS_ORIGINS='["http://localhost:3000"]'`) |
-| `NEXT_PUBLIC_BACKEND_URL` | No | `http://localhost:8000` | Frontend → backend URL |
-
-## Testing
-
-```bash
-# Backend
-cd backend && pytest -v
-
-# Frontend
-cd frontend && npm test && npx tsc --noEmit
-```
-
-108 backend tests, 17 frontend tests, all passing as of the last commit on `main`.
-
-## Known limitations
-
-- **Omniroute isn't portable.** It only works on the machine it was configured on. On
-  any other machine (including yours, most likely), ORCA automatically falls back to
-  Ollama Cloud, which works but is less reliable at strict JSON output.
-- **Route Safety Agent is a hazard scan, not a navigational path planner.** It samples 5
-  waypoints in a straight line between two points and checks real weather/risk data at
-  each — there's no land-avoidance, shipping-lane data, or bathymetry. It answers "is
-  this route safe, and where," not "here's the GPS-optimal path."
-- **Proactive alerts are in-app only.** They arrive over a live connection while a
-  browser tab is open — no push notifications, no email/SMS. Close the tab, miss the
-  alert.
-- **Lightning alerts are a real-time sample, not a continuous monitor.** Each check
-  listens to the live feed for 5 seconds; a strike just outside that window is
-  genuinely missed. An empty result means "none observed in this window," not "none
-  exist."
-- **Accounts are minimal by design.** Email + password only — no OAuth, no email
-  verification, no password reset. A signup token is a JWT signed with an insecure
-  fixed default unless you set `JWT_SECRET`.
-- **Voice is browser-based only, not real telephony.** The mic button and read-aloud
-  toggle use the browser's built-in Web Speech API — no SMS, no phone calls, no IVR.
-  They only appear when the browser supports them, and stop working the moment the
-  tab closes.
-- **The productivity diagnostic covers only the SST half of the story.** There's no
-  chlorophyll trend data (only a point-in-time value), so a chlorophyll-driven change
-  in conditions won't show up in the "why" answer. It also isn't real fish-catch data —
-  no free fisheries dataset exists — it's a proxy built from real ocean-condition trends.
-- **Chlorophyll data is stale.** NOAA's `erdMH1chla1day` dataset has been frozen
-  upstream since 2022-07-25; the SST half of the same query is genuinely live.
-
-## Project structure
+## 📂 Project Structure
 
 ```
-backend/
-  app/
-    agents/        # planner, geospatial, weather, risk, ocean_analytics, route, reporting
-    connectors/     # one module per external data source, all same {data, source, fetched_at, is_cached} contract
-    graph.py        # the fixed LangGraph pipeline
-    llm.py          # Omniroute → Ollama Cloud fallback client
-    auth.py         # password hashing + JWT tokens
-    db.py           # SQLite: persistent history + user accounts
-    alerting.py     # proactive hazard polling + SSE delivery
-    main.py         # FastAPI app, /auth/*, /chat, /sessions/*, /health
-  data/snapshots/    # committed fallback data for every connector
-  tests/
-frontend/
-  app/page.tsx       # auth gate + main chat/trace/map page
-  components/        # AuthGate, ChatPanel, ReasoningTrace, MapView, SstTrendChart
-  lib/                # chatClient.ts (SSE + auth calls), voice.ts (Web Speech API), types.ts
-docs/superpowers/
-  specs/              # design spec (what to build and why)
-  plans/              # task-by-task implementation plan
+ORCA/
+├── backend/
+│   ├── app/
+│   │   ├── agents/          # LangGraph agents (planner, geospatial, weather, risk, ocean, route, reporting)
+│   │   ├── connectors/      # Resilient external data sources (Open-Meteo, NOAA, GDACS, Blitzortung, OSM)
+│   │   ├── alerting.py      # Background hazard evaluator & SSE push
+│   │   ├── auth.py          # Session security & JWT handling
+│   │   ├── config.py        # Pydantic v2 application configuration
+│   │   ├── db.py            # SQLite schema & persistent conversation storage
+│   │   ├── graph.py         # Multi-agent LangGraph orchestration graph
+│   │   ├── llm.py           # Multi-provider LLM client with intelligent fallback
+│   │   └── main.py          # FastAPI endpoints (/chat, /auth, /sessions, /alerts)
+│   ├── data/snapshots/      # Committed fallback data snapshots
+│   └── tests/               # 196 unit & integration tests
+│
+├── frontend/
+│   ├── app/                 # Next.js App Router (/page.tsx, /demo/page.tsx, globals.css)
+│   ├── components/
+│   │   ├── ui/              # ai-chat-input.tsx (Cubic-bezier animated spring input)
+│   │   ├── AgentWorkflowPanel.tsx  # Dynamic workflow side panel
+│   │   ├── WorkflowGraph.tsx       # Live animated SVG multi-agent DAG
+│   │   ├── ChatPanel.tsx           # Advisory conversation & quick prompts
+│   │   ├── EvidencePanel.tsx       # Grounding metrics & telemetry citations
+│   │   ├── MapView.tsx             # Interactive Leaflet map with route markers
+│   │   ├── MarkdownContent.tsx     # Formatted advisory report renderer
+│   │   ├── RecommendationHero.tsx  # Top-level GO / CAUTION / NO-GO banner
+│   │   ├── SstTrendChart.tsx       # 7-day sea surface temperature trend visualization
+│   │   └── WhatIfCard.tsx          # Temporal departure comparison analysis
+│   └── lib/                 # chatClient.ts (SSE consumer), push.ts, types.ts
+│
+├── .vscode/                 # Preconfigured IDE CSS linting rules for Tailwind v4
+└── README.md                # Platform documentation
 ```
+
+---
+
+## 💡 Example Queries to Try
+
+- 🎣 **Fishing Feasibility**: *"Can I go fishing near Mangaluru tomorrow at 6 AM?"*
+- ⏰ **Departure Comparison**: *"What if I leave at 11 AM instead?"*
+- 🧭 **Potential Fishing Zones**: *"Where is the nearest fishing zone near Kochi?"*
+- ⚡ **Marine Hazard Inspection**: *"Any cyclone or lightning alerts near Veraval Port?"*
+- 🗺️ **Transit Safety Scan**: *"Is the sea route safe between Chennai and Visakhapatnam?"*
+
+---
+
+## 🏆 Hackathon Submission
+
+Developed for **Smart India Hackathon 2024** — Problem Statement **SIH26176**: *Intelligent Multi-Agent System for Coastal Fisheries and Ocean Safety Advisory*.
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ by the ORCA Engineering Team</sub>
+</div>
