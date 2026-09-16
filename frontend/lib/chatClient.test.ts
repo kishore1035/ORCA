@@ -48,6 +48,27 @@ describe("streamChat", () => {
     const gen = streamChat("session-1", "hello", "test-token");
     await expect(gen.next()).rejects.toThrow("/chat failed: 500");
   });
+
+  it("sends a backend-valid location source (regression: backend rejects 'USER_SELECTED')", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const gen = streamChat("session-1", "hello", "test-token", { lat: 12.87, lon: 74.84 });
+    for await (const _ of gen) {
+      // drain
+    }
+
+    const [, options] = fetchMock.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body.location.source).toBe("MANUAL");
+  });
 });
 
 describe("fetchHistory", () => {

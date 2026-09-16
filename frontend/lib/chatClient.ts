@@ -106,7 +106,11 @@ export async function* streamChat(
     payload.location = {
       latitude: location.lat,
       longitude: location.lon,
-      source: "USER_SELECTED",
+      // Backend's LocationSource is a closed enum (GPS/GOOGLE_MAPS/
+      // MAP_CLICK/MANUAL) -- "USER_SELECTED" isn't a member and made every
+      // follow-up message in a session (once `location` state was set) fail
+      // with a 422. MANUAL is the closest real fit and matches its default.
+      source: "MANUAL",
     };
   }
   const headers: Record<string, string> = { "Content-Type": "application/json" };
