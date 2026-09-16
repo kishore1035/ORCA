@@ -1,17 +1,11 @@
-// frontend/components/ChatPanel.tsx
-"use client";
-
-import { useEffect, useRef, useState, FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Waves, MapPin, AlertTriangle, Check, Fish, Clock, Zap, Compass, ChevronDown, ChevronRight } from "lucide-react";
 import { ChatMessage, TraceEntry } from "@/lib/types";
 import { RecommendationHero } from "./RecommendationHero";
 import { WhatIfCard } from "./WhatIfCard";
 import { EvidencePanel } from "./EvidencePanel";
-import {
-  isSpeechRecognitionSupported,
-  isSpeechSynthesisSupported,
-  speak,
-  startListening,
-} from "@/lib/voice";
+import { MarkdownContent } from "./MarkdownContent";
+import { PromptInput } from "./ui/ai-chat-input";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -23,23 +17,23 @@ interface ChatPanelProps {
 const DEMO_QUICK_PROMPTS = [
   {
     label: "Can I go fishing near Mangaluru tomorrow at 6 AM?",
-    icon: "🎣",
     query: "Can I go fishing near Mangaluru tomorrow at 6 AM?",
+    iconType: "fish" as const,
   },
   {
     label: "What if I leave at 11 AM instead?",
-    icon: "⏰",
     query: "What if I leave at 11 AM instead?",
+    iconType: "clock" as const,
   },
   {
     label: "Where is the nearest fishing zone near Kochi?",
-    icon: "🐟",
     query: "Where is the nearest fishing zone near Kochi?",
+    iconType: "compass" as const,
   },
   {
     label: "Any cyclone or lightning alerts near Mangaluru?",
-    icon: "⚡",
     query: "Any cyclone or lightning alerts near Mangaluru?",
+    iconType: "zap" as const,
   },
 ];
 
@@ -112,50 +106,16 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [showEvidenceFor, setShowEvidenceFor] = useState<number | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const [speakAnswers, setSpeakAnswers] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const lastSpokenCount = useRef(0);
 
   // Auto-scroll when messages update or during streaming
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isStreaming, currentTrace]);
 
-  useEffect(() => {
-    if (!speakAnswers) {
-      lastSpokenCount.current = messages.length;
-      return;
-    }
-    const last = messages[messages.length - 1];
-    if (messages.length > lastSpokenCount.current && last?.role === "assistant") {
-      speak(last.content);
-    }
-    lastSpokenCount.current = messages.length;
-  }, [messages, speakAnswers]);
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!input.trim() || isStreaming) return;
-    onSend(input.trim());
-    setInput("");
-  }
-
   function handlePromptClick(query: string) {
     if (isStreaming) return;
     onSend(query);
-  }
-
-  function handleMicClick() {
-    if (isListening) return;
-    setIsListening(true);
-    startListening(
-      (text) => {
-        setInput(text);
-        setIsListening(false);
-      },
-      () => setIsListening(false)
-    );
   }
 
   return (
@@ -178,7 +138,12 @@ export function ChatPanel({
               disabled={isStreaming}
               className="group text-xs px-3 py-1.5 rounded-xl bg-slate-100/90 hover:bg-black text-slate-800 hover:text-white border border-slate-300/80 hover:border-black font-medium transition-all shadow-2xs hover:shadow-xs disabled:opacity-50 text-left flex items-center gap-1.5"
             >
-              <span className="opacity-80 group-hover:opacity-100">{p.icon}</span>
+              <span className="opacity-80 group-hover:opacity-100">
+                {p.iconType === "fish" && <Fish className="w-3.5 h-3.5" />}
+                {p.iconType === "clock" && <Clock className="w-3.5 h-3.5" />}
+                {p.iconType === "compass" && <Compass className="w-3.5 h-3.5" />}
+                {p.iconType === "zap" && <Zap className="w-3.5 h-3.5" />}
+              </span>
               <span>{p.label}</span>
             </button>
           ))}
@@ -189,8 +154,8 @@ export function ChatPanel({
       <div className="flex-1 overflow-y-auto space-y-5 p-4 sm:p-5">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center min-h-[340px] text-center p-6 sm:p-8 bg-white/80 rounded-3xl border border-slate-200/80 shadow-2xs my-auto">
-            <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center mx-auto mb-3.5 text-2xl font-bold shadow-md ring-4 ring-slate-100">
-              🌊
+            <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center mx-auto mb-3.5 shadow-md ring-4 ring-slate-100">
+              <Waves className="w-6 h-6 text-sky-400" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 tracking-tight">
               ORCA Marine Reasoning Assistant
@@ -199,9 +164,15 @@ export function ChatPanel({
               Ask natural-language marine safety, fishing advisories, or coastal weather queries. Every assessment is grounded in official <strong>INCOIS</strong> ocean forecasts, <strong>IMD</strong> meteorological warnings, and <strong>ISRO</strong> satellite telemetry.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2 mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 font-medium">
-              <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200">✓ Wave & Swell Heights</span>
-              <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200">✓ Potential Fishing Zones (PFZ)</span>
-              <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200">✓ Cyclone & Lightning Alerts</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200">
+                <Check className="w-3 h-3 text-emerald-600" /> Wave & Swell Heights
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200">
+                <Check className="w-3 h-3 text-emerald-600" /> Potential Fishing Zones (PFZ)
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200">
+                <Check className="w-3 h-3 text-emerald-600" /> Cyclone & Lightning Alerts
+              </span>
             </div>
           </div>
         )}
@@ -240,12 +211,12 @@ export function ChatPanel({
                 <div className="p-4 sm:p-5 rounded-2xl bg-slate-100/90 border border-slate-300 text-slate-900 shadow-2xs space-y-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
                     <span className="w-5 h-5 rounded-md bg-white border border-slate-300 flex items-center justify-center text-xs shadow-2xs">
-                      📍
+                      <MapPin className="w-3.5 h-3.5 text-slate-700" />
                     </span>
                     <span>Location / Query Clarification Needed</span>
                   </div>
                   <div className="text-sm font-medium leading-relaxed">
-                    {m.content}
+                    <MarkdownContent content={m.content} />
                   </div>
                   {/* Quick suggested coastal areas */}
                   <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5">
@@ -270,7 +241,7 @@ export function ChatPanel({
                 <div className="p-4 sm:p-5 rounded-2xl bg-rose-50/80 border border-rose-200 text-rose-950 shadow-2xs space-y-2.5">
                   <div className="flex items-center gap-2 text-xs font-bold text-rose-800">
                     <span className="w-5 h-5 rounded-md bg-rose-100 border border-rose-200 flex items-center justify-center text-xs shadow-2xs">
-                      ⚠️
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-700" />
                     </span>
                     <span>Telemetry Processing Notice</span>
                   </div>
@@ -287,15 +258,15 @@ export function ChatPanel({
                 <div className="p-4 sm:p-5 rounded-2xl bg-white border border-sky-200/90 text-slate-900 shadow-[0_2px_12px_rgba(0,0,0,0.03)] ring-1 ring-sky-100/60 space-y-3">
                   <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100 text-xs">
                     <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                      <span className="text-sky-600 font-black">✓</span>
+                      <Check className="w-3.5 h-3.5 text-sky-600" />
                       <span>Synthesized Marine Advisory</span>
                     </div>
                     <span className="text-[10px] font-mono text-slate-400">
                       INCOIS · IMD Grounded
                     </span>
                   </div>
-                  <div className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-normal">
-                    {m.content}
+                  <div className="text-sm text-slate-800 leading-relaxed font-normal">
+                    <MarkdownContent content={m.content} />
                   </div>
                 </div>
               )}
@@ -307,8 +278,13 @@ export function ChatPanel({
                     onClick={() => setShowEvidenceFor(showEvidenceFor === i ? null : i)}
                     className="text-xs text-slate-800 font-semibold hover:text-black underline underline-offset-3 flex items-center gap-1.5 transition-colors"
                   >
+                    {showEvidenceFor === i ? (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-600" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                    )}
                     <span>
-                      {showEvidenceFor === i ? "▼ Hide" : "▶ Show"} Grounding Evidence & Observations ({m.evidence.length} metrics)
+                      {showEvidenceFor === i ? "Hide" : "Show"} Grounding Evidence & Observations ({m.evidence.length} metrics)
                     </span>
                   </button>
                   {showEvidenceFor === i && (
@@ -347,55 +323,20 @@ export function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── SPEECH SYNTHESIS OPTION ── */}
-      {isSpeechSynthesisSupported() && (
-        <div className="px-4 py-1.5 border-t border-slate-200/60 bg-white/80 flex items-center justify-end shrink-0">
-          <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none font-medium">
-            <input
-              type="checkbox"
-              checked={speakAnswers}
-              onChange={(e) => setSpeakAnswers(e.target.checked)}
-              className="accent-black rounded"
-            />
-            <span>Read advisories aloud</span>
-          </label>
-        </div>
-      )}
-
-      {/* ── INPUT FORM (Aligned and Consistent) ── */}
-      <form
-        onSubmit={handleSubmit}
-        className="flex items-center gap-2 p-3 sm:p-3.5 border-t bg-white border-slate-200 shrink-0"
-      >
-        <input
-          className="flex-1 h-11 border border-slate-300 rounded-xl px-4 text-sm bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-black focus:bg-white transition-all"
+      {/* ── ANIMATED SPRING PROMPT INPUT (Cubic-Bezier Physics & Fluid Morphing) ── */}
+      <div className="p-3 sm:p-4 bg-white shrink-0 flex items-center justify-center">
+        <PromptInput
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={setInput}
+          onSubmit={(val) => {
+            if (!val.trim() || isStreaming) return;
+            onSend(val.trim());
+            setInput("");
+          }}
           placeholder="Ask e.g. 'Can I fish near Mangaluru tomorrow at 6 AM?'"
-          disabled={isStreaming}
+          className="max-w-full mx-auto"
         />
-        {isSpeechRecognitionSupported() && (
-          <button
-            type="button"
-            onClick={handleMicClick}
-            disabled={isStreaming || isListening}
-            className="h-11 px-3.5 border border-slate-300 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
-            aria-label="Speak your question"
-          >
-            <span>🎤</span>
-            <span className="hidden sm:inline">
-              {isListening ? "Listening..." : "Speak"}
-            </span>
-          </button>
-        )}
-        <button
-          type="submit"
-          className="h-11 px-5 bg-black hover:bg-slate-800 text-white text-sm font-semibold rounded-xl disabled:opacity-50 transition-all shadow-xs shrink-0"
-          disabled={isStreaming || !input.trim()}
-        >
-          Send
-        </button>
-      </form>
+      </div>
     </div>
   );
 }

@@ -2,9 +2,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { Waves, Bell, AlertTriangle, Compass, Activity } from "lucide-react";
 import { AuthGate } from "@/components/AuthGate";
 import { ChatPanel } from "@/components/ChatPanel";
-import { ReasoningTrace } from "@/components/ReasoningTrace";
+import { AgentWorkflowPanel } from "@/components/AgentWorkflowPanel";
 import { streamChat, fetchHistory, subscribeToAlerts } from "@/lib/chatClient";
 import { isPushSupported, subscribeToPush } from "@/lib/push";
 import { AuthResponse, ChatMessage, ProactiveAlert, RouteWaypoint, TraceEntry } from "@/lib/types";
@@ -103,6 +104,8 @@ function ChatApp({
   const [sessionId] = useState(() => getOrCreateSessionId(auth?.email ?? null));
   const [activeAlert, setActiveAlert] = useState<ProactiveAlert | null>(null);
   const [pushStatus, setPushStatus] = useState<"idle" | "subscribing" | "subscribed" | "error">("idle");
+  // At first, keep just chat and map. Open workflow when chat is input.
+  const [workflowOpened, setWorkflowOpened] = useState(false);
 
   async function handleEnablePush() {
     setPushStatus("subscribing");
@@ -139,6 +142,8 @@ function ChatApp({
   }, [sessionId, auth?.token]);
 
   async function handleSend(message: string) {
+    // When chat is input: smoothly slide chat to left, map to right, and reveal workflow in the middle
+    setWorkflowOpened(true);
     setMessages((prev) => [...prev, { role: "user", content: message }]);
     setTrace([]);
     setRoute(null);
@@ -223,7 +228,7 @@ function ChatApp({
           {/* Brand Mark */}
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-black text-white flex items-center justify-center text-sm font-black shadow-xs ring-1 ring-black/10">
-              🌊
+              <Waves className="w-4 h-4 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
@@ -282,7 +287,7 @@ function ChatApp({
                   className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 hover:bg-black text-slate-700 hover:text-white border border-slate-200 text-xs font-medium transition-all shadow-2xs disabled:opacity-50"
                   aria-label="Enable hazard push notifications"
                 >
-                  <span>🔔</span>
+                  <Bell className="w-3.5 h-3.5" />
                   <span>
                     {pushStatus === "subscribing"
                       ? "Enabling..."
@@ -331,7 +336,7 @@ function ChatApp({
       {activeAlert && (
         <div className="bg-amber-50 border-b border-amber-200 text-amber-950 px-4 py-2.5 flex items-center justify-between gap-4 shrink-0 text-xs sm:text-sm animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="flex items-center gap-2">
-            <span className="text-base">⚠️</span>
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
               <strong>Hazard Alert:</strong> Sector conditions turned{" "}
               <span className="font-bold uppercase underline">{activeAlert.verdict}</span> —{" "}
@@ -348,10 +353,16 @@ function ChatApp({
         </div>
       )}
 
-      {/* ── MAIN RESPONSIVE SPLIT WORKSPACE ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 flex-1 min-h-0 overflow-hidden">
-        {/* Left Panel: Conversational Intelligence & Recommendations (7 cols) */}
-        <div className="lg:col-span-7 h-full border-r border-slate-200/80 flex flex-col min-h-0 bg-slate-50/50">
+      {/* ── MAIN FLUID WORKSPACE: Chatbox (Left) | Workflow Graph (Middle) | Ocean Map (Right) ── */}
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden relative">
+        {/* 1. Left Panel: Conversational Intelligence & Chatbox (Slides smoothly to left when workflow opens) */}
+        <div
+          className={`h-full border-r border-slate-200/90 flex flex-col min-h-0 bg-slate-50/50 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            workflowOpened
+              ? "w-full lg:w-[30%] lg:min-w-[320px]"
+              : "w-full lg:w-[48%] lg:min-w-[420px]"
+          }`}
+        >
           <ChatPanel
             messages={messages}
             onSend={handleSend}
@@ -360,17 +371,31 @@ function ChatApp({
           />
         </div>
 
-        {/* Right Panel: Spatial Map (50%) + Reasoning Pipeline Trace (50%) (5 cols) */}
-        <div className="lg:col-span-5 h-full flex flex-col min-h-0 bg-white">
-          {/* Top Half: Ocean Map & Marine Sectors */}
-          <div className="h-1/2 border-b border-slate-200 relative flex flex-col min-h-0">
-            <div className="px-3.5 py-2 bg-white/95 backdrop-blur-md border-b border-slate-200/90 flex items-center justify-between text-xs z-10 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">🗺️</span>
-                <span className="font-bold text-slate-800 tracking-tight">
-                  Ocean Map & Marine Sectors
-                </span>
-              </div>
+        {/* 2. Middle Panel: Multi-Agent Workflow Topology Graph (Slides into center with silky smooth expansion) */}
+        <div
+          className={`h-full flex flex-col min-h-0 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden ${
+            workflowOpened
+              ? "w-full lg:w-[42%] opacity-100 scale-100 translate-x-0 border-r border-slate-200/90 pointer-events-auto"
+              : "w-0 lg:w-0 opacity-0 scale-95 -translate-x-6 border-none pointer-events-none"
+          }`}
+        >
+          <AgentWorkflowPanel
+            trace={trace}
+            isStreaming={isStreaming}
+            onClose={() => setWorkflowOpened(false)}
+          />
+        </div>
+
+        {/* 3. Right Panel: Ocean Map & Marine Sectors (Slides smoothly to right when workflow opens) */}
+        <div className="flex-1 h-full flex flex-col min-h-0 bg-white transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]">
+          <div className="px-3.5 py-2 bg-white/95 backdrop-blur-md border-b border-slate-200/90 flex items-center justify-between text-xs z-10 shadow-2xs shrink-0">
+            <div className="flex items-center gap-2">
+              <Compass className="w-3.5 h-3.5 text-slate-700" />
+              <span className="font-bold text-slate-800 tracking-tight">
+                Ocean Map & Marine Sectors
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
               {location && (
                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200/80 font-mono text-[11px] text-slate-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -379,22 +404,29 @@ function ChatApp({
                   </span>
                 </div>
               )}
-            </div>
-
-            <div className="flex-1 relative min-h-0">
-              <MapView
-                lat={location?.lat ?? null}
-                lon={location?.lon ?? null}
-                label={mapLabel}
-                route={route ?? undefined}
-                placeName={resolvedPlaceName}
-              />
+              {/* Optional toggle button to reopen workflow anytime */}
+              {!workflowOpened && (
+                <button
+                  type="button"
+                  onClick={() => setWorkflowOpened(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 hover:bg-black text-white text-[11px] font-semibold transition-all shadow-xs cursor-pointer"
+                  title="Reveal Multi-Agent Workflow"
+                >
+                  <Activity className="w-3 h-3 text-emerald-400" />
+                  <span>Workflow</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Bottom Half: Multi-Agent Reasoning Trace */}
-          <div className="h-1/2 flex flex-col min-h-0">
-            <ReasoningTrace trace={trace} isStreaming={isStreaming} />
+          <div className="flex-1 relative min-h-0">
+            <MapView
+              lat={location?.lat ?? null}
+              lon={location?.lon ?? null}
+              label={mapLabel}
+              route={route ?? undefined}
+              placeName={resolvedPlaceName}
+            />
           </div>
         </div>
       </div>

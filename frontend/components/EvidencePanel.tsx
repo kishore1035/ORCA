@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { BarChart3, Check } from "lucide-react";
 import { MarineParameter, VerificationResult } from "@/lib/types";
 
 interface EvidencePanelProps {
@@ -48,15 +49,21 @@ export function EvidencePanel({ evidence, verification }: EvidencePanelProps) {
     <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm mb-4">
       <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
-          <span className="text-base">📊</span>
+          <BarChart3 className="w-4 h-4 text-slate-700 dark:text-slate-200" />
           <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
             Grounding Evidence & Observation Audit
           </h4>
         </div>
         <div className="text-xs text-slate-500 font-medium">
           {evidence.length} verified metrics |{" "}
-          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-            {verification?.is_verified ? "Provenance Audited ✓" : "Baseline Grounded"}
+          <span className="text-emerald-600 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
+            {verification?.is_verified ? (
+              <>
+                Provenance Audited <Check className="w-3 h-3 text-emerald-600 inline" />
+              </>
+            ) : (
+              "Baseline Grounded"
+            )}
           </span>
         </div>
       </div>
@@ -121,7 +128,7 @@ export function EvidencePanel({ evidence, verification }: EvidencePanelProps) {
         <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 text-[10px] text-slate-500">
           {verification.checks_passed.map((chk, i) => (
             <span key={i} className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
-              <span className="text-emerald-500">✓</span> {chk}
+              <Check className="w-3 h-3 text-emerald-500 inline" /> {chk}
             </span>
           ))}
         </div>

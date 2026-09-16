@@ -57,6 +57,7 @@ def init_db() -> None:
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                metadata_json TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             )"""
         )
@@ -69,6 +70,13 @@ def init_db() -> None:
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             )"""
         )
+        # Migrate existing tables if missing columns
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
+        if "user_id" not in cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN user_id INTEGER REFERENCES users(id)")
+        msg_cols = [r[1] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
+        if "metadata_json" not in msg_cols:
+            conn.execute("ALTER TABLE messages ADD COLUMN metadata_json TEXT")
         conn.commit()
     finally:
         conn.close()
@@ -135,23 +143,42 @@ def get_history(session_id: str) -> list[dict]:
     conn = _connect()
     try:
         rows = conn.execute(
-            "SELECT role, content FROM messages WHERE session_id = ? ORDER BY id ASC",
+            "SELECT role, content, metadata_json FROM messages WHERE session_id = ? ORDER BY id ASC",
             (session_id,),
         ).fetchall()
     finally:
         conn.close()
-    return [{"role": role, "content": content} for role, content in rows]
+    history = []
+    for role, content, metadata_json in rows:
+        item: dict = {"role": role, "content": content}
+        if metadata_json:
+            try:
+                meta = json.loads(metadata_json)
+                if isinstance(meta, dict):
+                    for k, v in meta.items():
+                        if v is not None and k not in item:
+                            item[k] = v
+            except Exception:
+                pass
+        history.append(item)
+    return history
 
 
-def append_message(session_id: str, role: str, content: str) -> None:
+def append_message(
+    session_id: str,
+    role: str,
+    content: str,
+    metadata: dict | None = None,
+) -> None:
     conn = _connect()
     try:
         conn.execute(
             "INSERT OR IGNORE INTO sessions (id) VALUES (?)", (session_id,)
         )
+        metadata_json = json.dumps(metadata) if metadata else None
         conn.execute(
-            "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
-            (session_id, role, content),
+            "INSERT INTO messages (session_id, role, content, metadata_json) VALUES (?, ?, ?, ?)",
+            (session_id, role, content, metadata_json),
         )
         conn.commit()
     finally:

@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { Clock, TrendingDown, TrendingUp } from "lucide-react";
 import { WhatIfComparison } from "@/lib/types";
 
 interface WhatIfCardProps {
@@ -27,19 +28,27 @@ export function WhatIfCard({ comparison }: WhatIfCardProps) {
     <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 p-4 shadow-sm mb-4">
       <div className="flex items-center justify-between gap-2 pb-2 border-b border-indigo-100 dark:border-indigo-900/50">
         <div className="flex items-center gap-2">
-          <span className="text-lg">⏰</span>
+          <Clock className="w-4 h-4 text-indigo-700 dark:text-indigo-300" />
           <h4 className="text-sm font-bold text-indigo-950 dark:text-indigo-200">
             What-If Departure Comparison
           </h4>
         </div>
         <span
-          className={`px-2.5 py-0.5 rounded text-xs font-semibold ${
+          className={`px-2.5 py-0.5 rounded text-xs font-semibold inline-flex items-center gap-1 ${
             isSafer
               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200"
               : "bg-orange-100 text-orange-800 dark:bg-orange-900/60 dark:text-orange-200"
           }`}
         >
-          {isSafer ? `▼ ${Math.abs(scoreDelta)} pts Risk Reduction` : `▲ ${scoreDelta} pts Risk Increase`}
+          {isSafer ? (
+            <>
+              <TrendingDown className="w-3 h-3 text-emerald-700" /> {Math.abs(scoreDelta)} pts Risk Reduction
+            </>
+          ) : (
+            <>
+              <TrendingUp className="w-3 h-3 text-orange-700" /> {scoreDelta} pts Risk Increase
+            </>
+          )}
         </span>
       </div>
 

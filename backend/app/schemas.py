@@ -93,6 +93,11 @@ class TraceEntry(BaseModel):
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
+    risk: RiskAssessment | dict[str, Any] | None = None
+    verification: VerificationResult | dict[str, Any] | None = None
+    what_if: WhatIfComparison | dict[str, Any] | None = None
+    evidence: list[MarineParameter | dict[str, Any]] | None = None
+    location: CanonicalLocation | dict[str, Any] | None = None
 
 
 class ChatRequest(BaseModel):

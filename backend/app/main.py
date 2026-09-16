@@ -1,9 +1,12 @@
 import asyncio
 import json
+import logging
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger(__name__)
 from app import alerting, auth, db, push
 from app.config import get_settings
 from app.llm import get_llm_client
@@ -27,11 +30,20 @@ MIN_PASSWORD_LENGTH = 8
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    try:
+        from app.demo_seed import seed_demo_data
+        seed_demo_data()
+    except Exception as e:
+        logger.warning("Demo data seeding skipped/failed: %s", e)
     task = asyncio.create_task(alerting.run_periodic_checks())
     try:
         yield
     finally:
         task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="ORCA Marine Intelligence Platform", lifespan=lifespan)
@@ -113,7 +125,7 @@ async def push_subscribe(request: PushSubscribeRequest, user: dict = Depends(_cu
     return {"status": "subscribed"}
 
 
-@app.get("/sessions/{session_id}/history")
+@app.get("/sessions/{session_id}/history", response_model_exclude_none=True)
 async def session_history(session_id: str, user: dict = Depends(_current_user)) -> list[ChatMessage]:
     owner = db.get_session_owner(session_id)
     if owner is not None and owner != user["user_id"]:
@@ -171,14 +183,22 @@ async def chat(request: ChatRequest, user: dict = Depends(_current_user)):
                 yield f"event: trace\ndata: {entry.model_dump_json()}\n\n"
             last_trace_len = len(trace)
             if state.get("final_answer"):
-                db.append_message(request.session_id, "assistant", state["final_answer"])
-                payload = json.dumps({
-                    "answer": state["final_answer"],
+                meta_dict = {
                     "risk": state.get("risk_result"),
                     "verification": state.get("verification_result"),
                     "what_if": state.get("what_if_result"),
                     "evidence": state.get("evidence"),
                     "location": state.get("canonical_location"),
+                }
+                db.append_message(
+                    request.session_id,
+                    "assistant",
+                    state["final_answer"],
+                    metadata=meta_dict,
+                )
+                payload = json.dumps({
+                    "answer": state["final_answer"],
+                    **meta_dict,
                 })
                 yield f"event: answer\ndata: {payload}\n\n"
 

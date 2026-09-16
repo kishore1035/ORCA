@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { Compass, Check } from "lucide-react";
 import {
   RiskAssessment,
   VerificationResult,
@@ -381,8 +382,8 @@ export function RecommendationHero({
         data-testid="recommendation-hero-empty"
         className="rounded-3xl bg-white border border-slate-200/80 shadow-[0_2px_16px_rgba(0,0,0,0.03)] p-6 sm:p-7 mb-5 text-center transition-all"
       >
-        <div className="w-11 h-11 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400 text-lg shadow-xs">
-          🧭
+        <div className="w-11 h-11 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400 shadow-xs">
+          <Compass className="w-5 h-5 text-slate-400" />
         </div>
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
           Marine Ecosystem Reasoning
@@ -505,8 +506,14 @@ export function RecommendationHero({
               {Math.round(confidence * 100)}%
             </span>
           </div>
-          <span className="text-[10px] text-slate-400 mt-2 font-medium tracking-wide">
-            {verification?.is_verified ? "Provenance Verified ✓" : "Cross-Grounded"}
+          <span className="text-[10px] text-slate-400 mt-2 font-medium tracking-wide inline-flex items-center gap-1">
+            {verification?.is_verified ? (
+              <>
+                Provenance Verified <Check className="w-3 h-3 text-emerald-600" />
+              </>
+            ) : (
+              "Cross-Grounded"
+            )}
           </span>
         </div>
       </div>

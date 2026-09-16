@@ -60,8 +60,12 @@ async def planner_node(state: GraphState) -> GraphState:
     try:
         plan = await create_plan(state["_client"], state["message"], state.get("history", []))
     except Exception as exc:
-        logger.warning("planner create_plan failed, falling back to default plan: %s", exc)
-        plan = dict(DEFAULT_PLAN)
+        logger.warning("planner create_plan failed, falling back to smart heuristic plan: %s", exc)
+        client = state.get("_client")
+        if client and hasattr(client, "_demo_fallback_structured"):
+            plan = client._demo_fallback_structured("", state["message"], DEFAULT_PLAN)
+        else:
+            plan = dict(DEFAULT_PLAN)
     trace_entry = TraceEntry(
         agent="planner",
         inputs={"message": state["message"]},
