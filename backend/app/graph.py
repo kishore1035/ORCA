@@ -148,8 +148,14 @@ async def route_node(state: GraphState) -> GraphState:
 
 
 def _is_real_place(name) -> bool:
-    """LLMs occasionally emit 'null' or 'none' instead of real JSON null."""
-    return bool(name) and str(name).strip().lower() not in ("", "null", "none")
+    """LLMs occasionally emit 'null', 'none', or punctuation-only junk (e.g. ',')
+    instead of real JSON null for an unset place name."""
+    if not name:
+        return False
+    cleaned = str(name).strip()
+    if cleaned.lower() in ("", "null", "none"):
+        return False
+    return any(ch.isalnum() for ch in cleaned)
 
 
 _RESULT_KEY_TO_TRACE_AGENT = {

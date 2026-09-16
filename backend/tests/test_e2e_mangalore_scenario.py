@@ -88,7 +88,7 @@ async def test_mangalore_fishing_query_e2e(monkeypatch):
     for param in evidence:
         assert param["data_status"] in ["LIVE", "FORECAST", "CACHED", "HISTORICAL"]
         assert param["confidence"] > 0
-        assert param["source"] in ["INCOIS", "IMD", "MOSDAC", "ISRO-MOSDAC", "Open-Meteo", "GDACS"]
+        assert param["source"] in ["INCOIS", "IMD", "MOSDAC", "ISRO-MOSDAC", "Open-Meteo", "GDACS", "stormglass"]
 
 
 @pytest.mark.asyncio

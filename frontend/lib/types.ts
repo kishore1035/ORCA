@@ -117,6 +117,8 @@ export interface RouteWaypoint {
   lon: number;
   verdict: string;
   reasons: string[];
+  rerouted?: boolean;
+  original?: { lat: number; lon: number; reasons: string[] };
 }
 
 export interface AuthResponse {

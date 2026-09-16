@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 import math
 from pathlib import Path
 from typing import Any
-import httpx
 
 from app.connectors.base import fetch_with_fallback
 from app.connectors.geospatial import compute_coastal_distance, _haversine_km
@@ -22,24 +21,6 @@ SNAPSHOT_PATH = (
     / "snapshots"
     / "incois_mangalore.json"
 )
-
-# INCOIS Coastal Forecast GeoServer base
-INCOIS_GEOSERVER_WFS = "https://incois.gov.in/geoserver/OSF_CoastalForecast/ows"
-INCOIS_THREDDS_BASE = "https://incois.gov.in/thredds"
-
-SECTOR_WFS_MAP = {
-    "Gujarat": "OSF_CoastalForecast:SECTORNAME_GUJARAT",
-    "Maharashtra": "OSF_CoastalForecast:SECTORNAME_MAHARASHTRA",
-    "Goa": "OSF_CoastalForecast:SECTORNAME_GOA",
-    "Karnataka": "OSF_CoastalForecast:SECTORNAME_KARNATAKA",
-    "Kerala": "OSF_CoastalForecast:SECTORNAME_KERALA",
-    "Tamil Nadu": "OSF_CoastalForecast:SECTORNAME_TAMIL_NADU",
-    "Andhra Pradesh": "OSF_CoastalForecast:SECTORNAME_ANDHRA_PRADESH",
-    "Odisha": "OSF_CoastalForecast:SECTORNAME_ODISHA",
-    "West Bengal": "OSF_CoastalForecast:SECTORNAME_WEST_BENGAL",
-    "Lakshadweep": "OSF_CoastalForecast:SECTORNAME_LAKSHADWEEP",
-    "Andaman & Nicobar": "OSF_CoastalForecast:SECTORNAME_ANDAMAN_NICOBAR",
-}
 
 
 def resolve_incois_grid_point(lat: float, lon: float) -> tuple[float, float, float]:
@@ -125,78 +106,25 @@ def _extract_parameters_for_time(
 
 
 async def _live_fetch_incois(lat: float, lon: float, target_time: str | None = None) -> dict:
-    """Attempts live fetch from INCOIS services using dynamically resolved sector."""
+    """INCOIS's public OSF_CoastalForecast GeoServer WFS layer (the only
+    unauthenticated INCOIS endpoint this connector can reach -- verified
+    live against the real server) returns sector *boundary metadata only*:
+    SECTORNAME, SEC_ID, and geometry. It carries no wave/wind/swell/current/
+    SST attributes at all. There is no honest way to serve "live" numeric
+    marine-forecast values from this layer, so this always raises and lets
+    fetch_with_fallback use the disclosed cached snapshot instead -- per
+    this project's connector contract, a connector must never fabricate
+    data. (A real live path would need INCOIS's THREDDS NCSS interface,
+    which does carry real values -- see docs/data-sources.md -- but isn't
+    implemented here.)
+    """
     coastal = compute_coastal_distance(lat, lon)
     if not coastal["in_marine_coverage"]:
         raise ValueError(coastal["coverage_message"] or "Outside Indian marine coverage")
-
-    sector = coastal["nearest_coastal_sector"]
-    type_name = SECTOR_WFS_MAP.get(sector, "OSF_CoastalForecast:SECTORNAME_KARNATAKA")
-
-    async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
-        params = {
-            "service": "WFS",
-            "version": "1.0.0",
-            "request": "GetFeature",
-            "typeName": type_name,
-            "outputFormat": "application/json",
-            "maxFeatures": "1",
-        }
-        resp = await client.get(INCOIS_GEOSERVER_WFS, params=params)
-        resp.raise_for_status()
-        geojson = resp.json()
-
-        if geojson.get("features"):
-            feature = geojson["features"][0]
-            sector_name = feature.get("properties", {}).get("SECTORNAME", sector)
-            return {
-                "sector": sector_name,
-                "location": f"{sector_name} Coastal Waters",
-                "latitude": lat,
-                "longitude": lon,
-                "current_conditions": {
-                    "significant_wave_height": 2.3,
-                    "wave_period": 7.8,
-                    "swell_height": 1.9,
-                    "swell_period": 12.1,
-                    "wind_speed_kmh": 28.5,
-                    "wind_direction_deg": 260.0,
-                    "surface_current_speed_ms": 0.45,
-                    "surface_current_direction_deg": 335.0,
-                    "sst_celsius": 28.4,
-                },
-                "hourly_forecast": [
-                    {
-                        "time": "2026-09-16T06:00:00Z",
-                        "significant_wave_height": 2.3,
-                        "wave_period": 7.8,
-                        "swell_height": 1.9,
-                        "swell_period": 12.1,
-                        "wind_speed_kmh": 28.5,
-                        "wind_direction_deg": 260.0,
-                        "surface_current_speed_ms": 0.45,
-                        "surface_current_direction_deg": 335.0,
-                        "sst_celsius": 28.4,
-                        "valid_from": "2026-09-16T05:00:00Z",
-                        "valid_until": "2026-09-16T07:00:00Z",
-                    },
-                    {
-                        "time": "2026-09-16T11:00:00Z",
-                        "significant_wave_height": 1.4,
-                        "wave_period": 6.5,
-                        "swell_height": 1.1,
-                        "swell_period": 10.0,
-                        "wind_speed_kmh": 16.2,
-                        "wind_direction_deg": 285.0,
-                        "surface_current_speed_ms": 0.28,
-                        "surface_current_direction_deg": 320.0,
-                        "sst_celsius": 28.6,
-                        "valid_from": "2026-09-16T10:00:00Z",
-                        "valid_until": "2026-09-16T12:00:00Z",
-                    },
-                ],
-            }
-        raise ValueError(f"No INCOIS coastal sector found for coordinates {lat}, {lon}")
+    raise ValueError(
+        "INCOIS's public OSF_CoastalForecast WFS layer has no numeric marine "
+        "forecast values; always falling back to the verified cached snapshot"
+    )
 
 
 async def get_marine_forecast(

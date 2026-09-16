@@ -18,7 +18,7 @@ def audit_marine_evidence(
     issues: list[str] = []
 
     # 1. Source verification
-    known_providers = {"INCOIS", "IMD", "ISRO-MOSDAC", "open-meteo-marine", "noaa-erddap-sst", "gdacs-cyclone-tracker", "nominatim"}
+    known_providers = {"INCOIS", "IMD", "ISRO-MOSDAC", "open-meteo-marine", "noaa-erddap-sst", "gdacs-cyclone-tracker", "nominatim", "stormglass"}
     detected_sources = set(sources)
 
     if detected_sources:

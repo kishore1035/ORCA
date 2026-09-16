@@ -234,7 +234,7 @@ function ChatApp({ auth, onLogout }: { auth: AuthResponse; onLogout: () => void 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
             <span className="font-semibold text-slate-800">IMD:</span>
-            <span className="text-slate-500 font-mono text-[10px]">VERIFIED</span>
+            <span className="text-slate-500 font-mono text-[10px]">ADVISORY</span>
           </div>
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />

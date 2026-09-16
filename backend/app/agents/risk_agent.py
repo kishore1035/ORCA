@@ -1,3 +1,5 @@
+import asyncio
+
 from app.connectors.alerts import get_cyclone_alerts, get_lightning_alerts
 from app.connectors.imd import get_imd_warnings
 from app.agents.risk_engine import calculate_risk
@@ -38,8 +40,12 @@ def _assess(weather: dict, alerts_data: dict) -> tuple[str, list[str]]:
 async def run_risk_agent(
     lat: float, lon: float, weather: dict, geo: dict | None = None
 ) -> tuple[dict, TraceEntry]:
-    cyclone_result = await get_cyclone_alerts(lat, lon)
-    lightning_result = await get_lightning_alerts(lat, lon)
+    # Independent of each other; lightning alone takes a minimum of
+    # LIGHTNING_LISTEN_SECONDS to listen for strikes, so run concurrently
+    # rather than paying that wait twice.
+    cyclone_result, lightning_result = await asyncio.gather(
+        get_cyclone_alerts(lat, lon), get_lightning_alerts(lat, lon)
+    )
     alerts_data = {
         "cyclone_alerts": cyclone_result.data["cyclone_alerts"],
         "lightning_alerts": lightning_result.data["lightning_alerts"],

@@ -7,11 +7,24 @@ chlorophyll-a, SST trends, satellite bio-optical markers, and official INCOIS PF
 NOTE: ORCA provides advisory-aware fishing analysis and correlates official INCOIS PFZ advisories
 alongside satellite telemetry.
 """
+import asyncio
+
 from app.connectors.ocean_analytics import get_sst, get_chlorophyll, get_sst_trend
 from app.connectors.mosdac import get_mosdac_satellite_data
 from app.connectors.incois import get_incois_marine_forecast
 from app.connectors.pfz import get_pfz_advisory
 from app.schemas import TraceEntry
+
+
+async def _safe(coro):
+    """Satellite/PFZ enrichment is optional -- a failure here must not break
+    the baseline SST/chlorophyll result. Each connector already falls back
+    to its own cached snapshot internally, so this only guards truly
+    unexpected failures (e.g. a missing snapshot file)."""
+    try:
+        return await coro
+    except Exception:
+        return None
 
 # Simplified heuristic for PFZ/advisory-aware fishing analysis:
 # a warm-water front (27-30C) combined with elevated chlorophyll (>=0.2 mg/m3)
@@ -74,10 +87,10 @@ def _score(sst_c: float, chlorophyll: float) -> tuple[str, list[str]]:
 
 async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, TraceEntry]:
     # 1. Fetch baseline NOAA SST, chlorophyll, trend, and INCOIS PFZ advisory
-    sst_result = await get_sst(lat, lon)
-    chl_result = await get_chlorophyll(lat, lon)
-    trend_result = await get_sst_trend(lat, lon)
-    pfz_result = await get_pfz_advisory(lat, lon)
+    # -- independent of each other, so run concurrently.
+    sst_result, chl_result, trend_result, pfz_result = await asyncio.gather(
+        get_sst(lat, lon), get_chlorophyll(lat, lon), get_sst_trend(lat, lon), get_pfz_advisory(lat, lon)
+    )
 
     sst_c = sst_result.data["sst_celsius"]
     chlorophyll = chl_result.data["chlorophyll_mg_m3"]
@@ -91,33 +104,29 @@ async def run_ocean_analytics_agent(lat: float, lon: float) -> tuple[dict, Trace
 
     # If running in legacy unit test where fake_get_sst is mocked, maintain exact legacy output
     if getattr(get_sst, "__name__", "") != "fake_get_sst":
-        # 2. Enrich with MOSDAC Oceansat-3 satellite data if available
-        try:
-            mosdac_res = await get_mosdac_satellite_data(lat, lon)
-            if mosdac_res and mosdac_res.data:
-                if "chlorophyll_mg_m3" in mosdac_res.data:
-                    chlorophyll = mosdac_res.data["chlorophyll_mg_m3"]
-                parameters.extend(mosdac_res.data.get("parameters", []))
-                if mosdac_res.source not in sources:
-                    sources.append(mosdac_res.source)
-                fetched_at = max(fetched_at, mosdac_res.fetched_at)
-                is_cached = is_cached or mosdac_res.is_cached
-        except Exception:
-            pass
+        # 2 & 3. Enrich with MOSDAC Oceansat-3 satellite data and INCOIS SST
+        # -- independent of each other, so run concurrently.
+        mosdac_res, incois_res = await asyncio.gather(
+            _safe(get_mosdac_satellite_data(lat, lon)), _safe(get_incois_marine_forecast(lat, lon))
+        )
 
-        # 3. Enrich with INCOIS SST if available
-        try:
-            incois_res = await get_incois_marine_forecast(lat, lon)
-            if incois_res and incois_res.data:
-                incois_params = {p["parameter"]: p["value"] for p in incois_res.data.get("parameters", [])}
-                if "sst" in incois_params:
-                    sst_c = incois_params["sst"]
-                if incois_res.source not in sources:
-                    sources.append(incois_res.source)
-                fetched_at = max(fetched_at, incois_res.fetched_at)
-                is_cached = is_cached or incois_res.is_cached
-        except Exception:
-            pass
+        if mosdac_res and mosdac_res.data:
+            if "chlorophyll_mg_m3" in mosdac_res.data:
+                chlorophyll = mosdac_res.data["chlorophyll_mg_m3"]
+            parameters.extend(mosdac_res.data.get("parameters", []))
+            if mosdac_res.source not in sources:
+                sources.append(mosdac_res.source)
+            fetched_at = max(fetched_at, mosdac_res.fetched_at)
+            is_cached = is_cached or mosdac_res.is_cached
+
+        if incois_res and incois_res.data:
+            incois_params = {p["parameter"]: p["value"] for p in incois_res.data.get("parameters", [])}
+            if "sst" in incois_params:
+                sst_c = incois_params["sst"]
+            if incois_res.source not in sources:
+                sources.append(incois_res.source)
+            fetched_at = max(fetched_at, incois_res.fetched_at)
+            is_cached = is_cached or incois_res.is_cached
 
     likelihood, reasons = _score(sst_c, chlorophyll)
     productivity_trend, productivity_note = _productivity_trend(trend)

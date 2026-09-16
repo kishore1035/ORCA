@@ -13,6 +13,7 @@ Either way, hazard checking reuses the existing weather_agent/risk_agent at
 each waypoint -- no new hazard-assessment logic, same as alerting.py's
 proactive checks.
 """
+import asyncio
 import math
 
 try:
@@ -26,7 +27,10 @@ from app.schemas import TraceEntry
 
 WAYPOINT_COUNT = 5
 MAX_SEA_ROUTE_WAYPOINTS = 8
-DETOUR_OFFSET_KM = 20.0
+# Detour candidates are checked concurrently, nearest-first: two distances on
+# each side of the route bearing (4 candidates), not one fixed offset.
+DETOUR_DISTANCES_KM = [20.0, 40.0]
+DETOUR_SIDE_OFFSETS = [90.0, -90.0]
 KM_PER_DEGREE_LAT = 111.0
 
 
@@ -95,6 +99,22 @@ async def _check_waypoint(lat: float, lon: float) -> dict:
     return {"lat": lat, "lon": lon, "verdict": risk["verdict"], "reasons": risk["reasons"]}
 
 
+async def _find_safe_detour(lat: float, lon: float, bearing_deg: float) -> dict | None:
+    """Checks candidates at increasing distance on both sides of the route
+    bearing, concurrently (so searching more candidates doesn't add latency
+    vs. checking just one), and returns the nearest safe one, if any."""
+    candidates = [
+        _offset_perpendicular(lat, lon, bearing_deg + side, distance_km)
+        for distance_km in DETOUR_DISTANCES_KM
+        for side in DETOUR_SIDE_OFFSETS
+    ]
+    results = await asyncio.gather(*(_check_waypoint(c_lat, c_lon) for c_lat, c_lon in candidates))
+    for result in results:
+        if result["verdict"] == "safe":
+            return result
+    return None
+
+
 async def run_route_agent(
     start_lat: float, start_lon: float, end_lat: float, end_lon: float
 ) -> tuple[dict, TraceEntry]:
@@ -111,12 +131,25 @@ async def run_route_agent(
     for lat, lon in waypoint_coords:
         result = await _check_waypoint(lat, lon)
         if result["verdict"] == "unsafe":
-            detour_lat, detour_lon = _offset_perpendicular(lat, lon, bearing, DETOUR_OFFSET_KM)
-            detour_result = await _check_waypoint(detour_lat, detour_lon)
-            result["detour"] = detour_result if detour_result["verdict"] == "safe" else None
+            detour = await _find_safe_detour(lat, lon, bearing)
+            if detour:
+                waypoints.append({
+                    **detour,
+                    "rerouted": True,
+                    "original": {"lat": lat, "lon": lon, "reasons": result["reasons"]},
+                })
+                continue
+            result["detour"] = None
         waypoints.append(result)
 
-    overall_verdict = "safe" if all(w["verdict"] == "safe" for w in waypoints) else "hazardous_segments"
+    has_unresolved_hazard = any(w["verdict"] == "unsafe" for w in waypoints)
+    has_reroute = any(w.get("rerouted") for w in waypoints)
+    if has_unresolved_hazard:
+        overall_verdict = "hazardous_segments"
+    elif has_reroute:
+        overall_verdict = "safe_with_detours"
+    else:
+        overall_verdict = "safe"
     output = {"waypoints": waypoints, "overall_verdict": overall_verdict, "route_source": route_source}
     trace = TraceEntry(
         agent="route",

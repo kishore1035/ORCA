@@ -37,13 +37,13 @@ async def test_run_route_agent_all_safe_waypoints(monkeypatch):
     assert trace.agent == "route"
 
 
-async def test_run_route_agent_flags_hazardous_segment_with_detour(monkeypatch):
+async def test_run_route_agent_reroutes_through_first_safe_detour_candidate(monkeypatch):
     call_count = {"n": 0}
 
     async def fake_check_waypoint(lat, lon):
         call_count["n"] += 1
-        # First call (waypoint 0) is unsafe; every other call (including the
-        # detour re-check) is safe.
+        # First call (waypoint 0, the original point) is unsafe; every
+        # detour candidate checked afterwards is safe.
         if call_count["n"] == 1:
             return {"lat": lat, "lon": lon, "verdict": "unsafe", "reasons": ["high waves"]}
         return {"lat": lat, "lon": lon, "verdict": "safe", "reasons": ["calm"]}
@@ -52,14 +52,39 @@ async def test_run_route_agent_flags_hazardous_segment_with_detour(monkeypatch):
 
     output, _ = await ra.run_route_agent(10.0, 76.0, 10.5, 76.5)
 
-    assert output["overall_verdict"] == "hazardous_segments"
+    assert output["overall_verdict"] == "safe_with_detours"
     first = output["waypoints"][0]
-    assert first["verdict"] == "unsafe"
-    assert first["detour"] is not None
-    assert first["detour"]["verdict"] == "safe"
+    assert first["verdict"] == "safe"
+    assert first["rerouted"] is True
+    assert first["original"]["lat"] == 10.0
+    assert first["original"]["lon"] == 76.0
+    assert first["original"]["reasons"] == ["high waves"]
+    # Rerouted through one of the searched candidates, not the hazardous point.
+    assert (first["lat"], first["lon"]) != (10.0, 76.0)
 
 
-async def test_run_route_agent_detour_none_when_detour_also_unsafe(monkeypatch):
+async def test_run_route_agent_searches_multiple_detour_candidates_concurrently(monkeypatch):
+    route_waypoints = ra._interpolate_waypoints(10.0, 76.0, 10.5, 76.5, ra.WAYPOINT_COUNT)
+    checked_points = []
+
+    async def fake_check_waypoint(lat, lon):
+        checked_points.append((lat, lon))
+        if (lat, lon) == route_waypoints[0]:
+            return {"lat": lat, "lon": lon, "verdict": "unsafe", "reasons": ["high waves"]}
+        # Every other real route waypoint, and every detour candidate, is safe.
+        return {"lat": lat, "lon": lon, "verdict": "safe", "reasons": ["calm"]}
+
+    monkeypatch.setattr(ra, "_check_waypoint", fake_check_waypoint)
+
+    output, _ = await ra.run_route_agent(10.0, 76.0, 10.5, 76.5)
+
+    # 1 original + 4 candidates for the first hazardous waypoint, plus the
+    # remaining waypoints on the direct-line route (all safe, checked once).
+    assert len(checked_points) == 1 + len(ra.DETOUR_DISTANCES_KM) * len(ra.DETOUR_SIDE_OFFSETS) + (ra.WAYPOINT_COUNT - 1)
+    assert output["waypoints"][0]["rerouted"] is True
+
+
+async def test_run_route_agent_stays_hazardous_when_no_detour_candidate_is_safe(monkeypatch):
     async def fake_check_waypoint(lat, lon):
         return {"lat": lat, "lon": lon, "verdict": "unsafe", "reasons": ["storm"]}
 
@@ -67,7 +92,21 @@ async def test_run_route_agent_detour_none_when_detour_also_unsafe(monkeypatch):
 
     output, _ = await ra.run_route_agent(10.0, 76.0, 10.5, 76.5)
 
-    assert output["waypoints"][0]["detour"] is None
+    first = output["waypoints"][0]
+    assert first["verdict"] == "unsafe"
+    assert first["detour"] is None
+    assert "rerouted" not in first
+    assert output["overall_verdict"] == "hazardous_segments"
+
+
+async def test_find_safe_detour_returns_none_when_all_candidates_unsafe(monkeypatch):
+    async def fake_check_waypoint(lat, lon):
+        return {"lat": lat, "lon": lon, "verdict": "unsafe", "reasons": ["storm"]}
+
+    monkeypatch.setattr(ra, "_check_waypoint", fake_check_waypoint)
+
+    result = await ra._find_safe_detour(10.0, 76.0, 90.0)
+    assert result is None
 
 
 def test_sample_waypoints_keeps_all_when_under_max():

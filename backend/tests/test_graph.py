@@ -187,3 +187,50 @@ async def test_graph_treats_literal_null_strings_as_no_location(monkeypatch):
     geospatial_mock.assert_not_awaited()
     route_mock.assert_not_awaited()
     assert "location" in result["final_answer"].lower()
+
+
+async def test_graph_treats_comma_placeholder_as_no_location(monkeypatch):
+    # Regression: observed live against the Omniroute-routed model, which
+    # sometimes emits a literal "," for an unset optional field instead of
+    # "" or null. This previously passed _is_real_place's truthiness check
+    # and sent a single-location query down the two-point route path,
+    # skipping weather/risk/ocean_analytics entirely.
+    monkeypatch.setattr(
+        graph_module, "create_plan",
+        AsyncMock(return_value={
+            "intent": "check fishing safety near Kochi today", "place_name": "Kochi",
+            "start_place_name": ",", "end_place_name": ",",
+            "agents": ["weather", "risk"], "response_language": "English",
+        }),
+    )
+    monkeypatch.setattr(
+        graph_module, "run_geospatial_agent",
+        AsyncMock(return_value=({"lat": 9.9, "lon": 76.2}, _trace("geospatial"))),
+    )
+    monkeypatch.setattr(
+        graph_module, "run_weather_agent",
+        AsyncMock(return_value=({"wave_height_m": 1.0, "wind_speed_kmh": 10.0}, _trace("weather"))),
+    )
+    monkeypatch.setattr(
+        graph_module, "run_risk_agent",
+        AsyncMock(return_value=({"verdict": "safe", "reasons": []}, _trace("risk"))),
+    )
+    monkeypatch.setattr(
+        graph_module, "run_ocean_analytics_agent",
+        AsyncMock(return_value=({"pfz_likelihood": "moderate"}, _trace("ocean_analytics"))),
+    )
+    route_mock = AsyncMock()
+    monkeypatch.setattr(graph_module, "run_route_agent", route_mock)
+    monkeypatch.setattr(
+        graph_module, "synthesize_answer", AsyncMock(return_value="It is safe to go out.")
+    )
+
+    compiled = graph_module.build_graph(client=object())
+    result = await compiled.ainvoke(
+        {"message": "is it safe to go fishing near Kochi today?", "history": []}
+    )
+
+    route_mock.assert_not_awaited()
+    trace_agents = [t.agent for t in result["trace"]]
+    assert trace_agents == ["planner", "geospatial", "weather", "risk", "ocean_analytics"]
+    assert result["final_answer"] == "It is safe to go out."

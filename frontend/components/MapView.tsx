@@ -75,9 +75,15 @@ export function MapView({ lat, lon, label, route }: MapViewProps) {
             }}
           >
             <Popup>
-              {wp.verdict === "unsafe" ? "⚠️ Hazardous" : "✓ Safe"}
+              {wp.rerouted ? "🔀 Rerouted around hazard" : wp.verdict === "unsafe" ? "⚠️ Hazardous" : "✓ Safe"}
               <br />
               {wp.reasons.join("; ")}
+              {wp.rerouted && wp.original && (
+                <>
+                  <br />
+                  <em>Original point was unsafe: {wp.original.reasons.join("; ")}</em>
+                </>
+              )}
             </Popup>
           </CircleMarker>
         ))}

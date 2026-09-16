@@ -92,6 +92,26 @@ export function ReasoningTrace({ trace }: { trace: TraceEntry[] }) {
                 </div>
               )}
 
+              {entry.agent === "weather" && entry.output["tide_height_m"] != null && (
+                <div className="p-2 rounded bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 text-[11px] space-y-0.5">
+                  <div className="font-semibold">🌊 Tide: {String(entry.output["tide_height_m"])}m now</div>
+                  {(() => {
+                    const high = entry.output["next_high_tide"] as { time: string; height_m: number } | null;
+                    const low = entry.output["next_low_tide"] as { time: string; height_m: number } | null;
+                    return (
+                      <>
+                        {high && (
+                          <div>Next high: {high.height_m}m at {new Date(high.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                        )}
+                        {low && (
+                          <div>Next low: {low.height_m}m at {new Date(low.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
               {isTrendPointArray(trend) && (
                 <div className="pt-1">
                   <SstTrendChart trend={trend} />
