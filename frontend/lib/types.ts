@@ -88,6 +88,8 @@ export interface ChatMessage {
   what_if?: WhatIfComparison | null;
   evidence?: MarineParameter[] | null;
   location?: CanonicalLocation | null;
+  is_error?: boolean;
+  message_type?: "clarification" | "answer" | "error";
 }
 
 export type ChatStreamEvent =
